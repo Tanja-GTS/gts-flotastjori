@@ -1,0 +1,91 @@
+.timeline {
+  display: grid;
+  grid-auto-rows: auto;
+  border-top: 1px solid #ddd;
+  border-left: 1px solid #ddd;
+}
+
+.corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  background: #fafafa;
+  border-right: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+}
+
+
+.day-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+
+.bus-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  border-right: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-weight: 500;
+  background: white;
+}
+
+
+.cell {
+  border-right: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  background: white;
+}
+.shift-card {
+  background: #f1f3f5;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.shift-card:hover {
+  background: #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.shift-card:focus {
+  outline: 2px solid #2d6d5d;
+  outline-offset: 2px;
+  background: #e9ecef;
+}
+
+.shift-card:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.shift-name {
+  font-weight: 600;
+}
+
+.shift-time {
+  color: #555;
+}
+
+.shift-driver {
+  margin-top: 4px;
+  font-weight: 700;
+  color: #2d6d5d;
+}
+
+
