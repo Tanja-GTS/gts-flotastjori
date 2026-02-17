@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Env files (keep examples)
+.env
+.env.*
+!.env.example
+
+# MSAL token cache (device-code auth)
+.msal-token-cache.json

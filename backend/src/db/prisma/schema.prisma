@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Minimal starting models; adjust to your domain when ready.
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts Shift[]
+}
+
+model Shift {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  date         DateTime
+  route        String
+  shiftType    String
+  name         String
+  timeLabel    String?  // e.g. "06:00–10:00" (UI label)
+  driverName   String?
+  defaultBus   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, date])
+}

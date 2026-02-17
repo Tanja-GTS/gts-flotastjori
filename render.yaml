@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: fleet-scheduler
+    env: node
+    plan: starter
+    autoDeploy: true
+
+    # Build: install root deps, install backend deps, build the Vite frontend into ./dist
+    buildCommand: npm install && npm run backend:install && npm run build
+
+    # Start: run the Express backend in "single-service" mode (serves ./dist + /api)
+    startCommand: npm --prefix backend run start:prod
+
+    # Render will call this to know the service is up.
+    healthCheckPath: /health
+
+    envVars:
+      # Required in production (single-origin hosting)
+      - key: APP_ORIGIN
+        value: https://REPLACE_ME.onrender.com
+
+      # Entra API auth (recommended)
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: ENTRA_TENANT_ID
+        sync: false
+      - key: ENTRA_API_AUDIENCE
+        sync: false
+      - key: ENTRA_REQUIRED_SCOPE
+        value: access_as_user
+
+      # Frontend (Vite) build-time Entra vars (required for the Sign-in screen)
+      - key: VITE_ENTRA_TENANT_ID
+        sync: false
+      - key: VITE_ENTRA_CLIENT_ID
+        sync: false
+      - key: VITE_ENTRA_API_SCOPE
+        sync: false
+
+      # Microsoft Graph (app-only) for Lists + mail
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+
+      - key: MS_SITE_ID
+        sync: false
+      - key: MS_SHIFT_INSTANCES_LIST_ID
+        sync: false
+      - key: MS_SHIFT_PATTERNS_LIST_ID
+        sync: false
+
+      # Optional: email sender UPN (only needed if using Graph sendMail)
+      - key: MAIL_SENDER_UPN
+        sync: false

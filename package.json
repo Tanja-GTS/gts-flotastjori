@@ -2,16 +2,34 @@
   "name": "fleet-scheduler",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev:frontend": "node node_modules/vite/bin/vite.js",
+    "dev": "concurrently -n backend,frontend -c blue,green --kill-others-on-fail \"npm run backend:dev\" \"npm run dev:frontend\"",
+    "dev:all": "npm run dev",
+    "dev:reset": "kill-port 4000 5174 || true && npm run dev",
+    "build": "node node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "node node_modules/vite/bin/vite.js preview",
+    "platform:check": "npm run lint && npm run build && npm run backend:typecheck",
+    "backend:install": "npm --prefix backend install",
+    "backend:dev": "npm --prefix backend run start",
+    "backend:watch": "npm --prefix backend run dev",
+    "backend:dev:tsnode": "npm --prefix backend run dev:tsnode",
+    "backend:typecheck": "npm --prefix backend run typecheck",
+    "backend:health": "curl -sSf http://localhost:4000/api/health",
+    "prod:build": "npm run build",
+    "prod:start": "npm run backend:install && npm run prod:build && npm --prefix backend run start:prod"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.2.0",
     "@mantine/core": "^8.3.13",
     "@mantine/hooks": "^8.3.13",
+    "@mantine/notifications": "^8.3.14",
+    "@tabler/icons-react": "^3.36.1",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -22,10 +40,12 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "kill-port": "^2.0.1",
     "vite": "^7.2.4"
   }
 }

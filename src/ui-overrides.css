@@ -1,0 +1,43 @@
+/* Global UI overrides that apply across pages (Mantine + app styling) */
+
+/* Ensure layouts can be full-bleed and padding is measured from screen edges */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Unified dropdown chevron: single down chevron that rotates when dropdown is expanded */
+.app-select-chev {
+  display: block;
+  width: 20px;
+  height: 20px;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* Mantine Combobox target gets one of these attributes when expanded (depends on configuration) */
+:where(.mantine-Input-wrapper):has([data-expanded]) .app-select-chev,
+:where(.mantine-Input-wrapper):has([aria-expanded='true']) .app-select-chev {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-select-chev {
+    transition: none;
+  }
+}
