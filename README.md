@@ -141,6 +141,21 @@ Example:
 
 2) Add everything required from `backend/.env.example` (Graph + Lists IDs + mail sender)
 
+If you see Graph errors like:
+
+- `A provided field name is not recognized`
+
+…it usually means your Microsoft Lists internal column names are not the friendly display names (often they look like `field_1`, `field_4`, etc). Fix it by setting the `LIST_FIELD_*` overrides in Render.
+
+Helpful debug endpoints:
+
+- List columns + sample: `https://<service-name>.onrender.com/api/debug/list-fields?list=instances&sample=1`
+- Effective env-derived mapping: `https://<service-name>.onrender.com/api/debug/env`
+
+If `AUTH_ENABLED=true`, these debug endpoints require an access token unless you temporarily set:
+
+- `PUBLIC_DEBUG_ENDPOINTS=true`
+
 3) If you want Entra-protected API in production (recommended), set:
 
 - `AUTH_ENABLED=true`

@@ -1,10 +1,16 @@
 import type { RequestHandler } from 'express';
 
+export function publicDebugEndpointsEnabled(): boolean {
+  const raw = (process.env.PUBLIC_DEBUG_ENDPOINTS || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
 function misconfiguredAuth(message: string): RequestHandler {
   // Keep the server running, but make the problem obvious.
   // Also allow /api/health to work so you can distinguish "backend down" vs "auth misconfigured".
   return (req, res, next) => {
     if (req.path === '/health') return next();
+    if (publicDebugEndpointsEnabled() && req.path.startsWith('/debug/')) return next();
     return res.status(503).json({
       ok: false,
       error: 'Auth is enabled but misconfigured',
@@ -29,7 +35,7 @@ function readOptional(name: string): string {
   return (process.env[name] || '').trim();
 }
 
-function bearerFromHeader(authHeader: unknown): string {
+export function bearerFromHeader(authHeader: unknown): string {
   if (typeof authHeader !== 'string') return '';
   const m = authHeader.match(/^\s*Bearer\s+(.+)\s*$/i);
   return m?.[1]?.trim() || '';
@@ -81,6 +87,8 @@ export function entraAuth(): RequestHandler {
     try {
       // Allow unauthenticated health checks.
       if (req.path === '/health') return next();
+      // Allow unauthenticated debug endpoints only when explicitly enabled.
+      if (publicDebugEndpointsEnabled() && req.path.startsWith('/debug/')) return next();
 
       const { jwks, jwtVerify } = await joseInit;
 

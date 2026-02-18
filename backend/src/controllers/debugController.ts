@@ -1,6 +1,8 @@
+
 import type { Request, Response } from 'express';
 import { getListFieldDiagnostics, type DebugListKey } from '../services/debugListsService';
 import { sendApiError } from './apiError';
+import { bearerFromHeader, publicDebugEndpointsEnabled } from '../middleware/entraAuth';
 
 function isDebugListKey(value: unknown): value is DebugListKey {
   return value === 'patterns' || value === 'instances';
@@ -18,12 +20,26 @@ export async function getListFieldsDebug(req: Request, res: Response) {
       });
     }
 
-    const sampleRaw = typeof req.query.sample === 'string' ? req.query.sample : undefined;
+    // If in public debug mode and not authenticated, force sample=0 (no real data)
+    let sampleRaw = typeof req.query.sample === 'string' ? req.query.sample : undefined;
+    let isPublicDebug = false;
+    if (publicDebugEndpointsEnabled()) {
+      const token = bearerFromHeader(req.headers.authorization);
+      if (!token) {
+        isPublicDebug = true;
+        sampleRaw = '0';
+      }
+    }
 
     const diagnostics = await getListFieldDiagnostics({
       list,
       sample: sampleRaw ? Number(sampleRaw) : undefined,
     });
+
+    // If public debug, remove sample.items (never return real row data)
+    if (isPublicDebug && diagnostics && diagnostics.sample) {
+      diagnostics.sample.items = [];
+    }
 
     return res.json({ ok: true, diagnostics });
   } catch (err) {

@@ -22,6 +22,10 @@ services:
       # Entra API auth (recommended)
       - key: AUTH_ENABLED
         value: "true"
+
+      # Optional: temporarily allow unauthenticated /api/debug/* while troubleshooting
+      - key: PUBLIC_DEBUG_ENDPOINTS
+        value: "false"
       - key: ENTRA_TENANT_ID
         sync: false
       - key: ENTRA_API_AUDIENCE
@@ -50,6 +54,28 @@ services:
       - key: MS_SHIFT_INSTANCES_LIST_ID
         sync: false
       - key: MS_SHIFT_PATTERNS_LIST_ID
+        sync: false
+
+      # ShiftInstances column internal-name overrides (Microsoft Lists often uses field_#)
+      - key: LIST_FIELD_WORKSPACE_ID
+        sync: false
+      - key: LIST_FIELD_DATE
+        sync: false
+      - key: LIST_FIELD_TEMPLATE_ID
+        sync: false
+      - key: LIST_FIELD_PATTERN_ID
+        sync: false
+      - key: LIST_FIELD_DRIVER_ID
+        sync: false
+      - key: LIST_FIELD_BUS_ID
+        sync: false
+      - key: LIST_FIELD_CONFIRMATION_STATUS
+        sync: false
+      - key: LIST_FIELD_NOTES
+        sync: false
+      - key: LIST_FIELD_GENERATED
+        sync: false
+      - key: LIST_FIELD_MANUAL_OVERRIDE
         sync: false
 
       # Optional: email sender UPN (only needed if using Graph sendMail)
