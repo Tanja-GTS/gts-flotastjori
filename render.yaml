@@ -17,7 +17,7 @@ services:
     envVars:
       # Required in production (single-origin hosting)
       - key: APP_ORIGIN
-        value: https://REPLACE_ME.onrender.com
+        value: https://gts-flotastjori.onrender.com
 
       # Entra API auth (recommended)
       - key: AUTH_ENABLED

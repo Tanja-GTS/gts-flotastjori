@@ -295,10 +295,6 @@ export default function App() {
           >
             {authStatus === 'signing-in' ? 'Signing in…' : 'Sign in with Microsoft'}
           </button>
-          <p style={{ marginBottom: 0, marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-            If you see a redirect URI error, open your Entra SPA app and add{' '}
-            <code>http://localhost:5174/</code> under Authentication.
-          </p>
         </div>
       </div>
     );

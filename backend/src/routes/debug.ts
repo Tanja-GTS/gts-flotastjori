@@ -49,3 +49,6 @@ debugRouter.get('/token-info', getTokenInfo);
 
 // Debug: try different PATCH payload shapes for confirmationStatus.
 debugRouter.post('/instances/:id/confirmation', postPatchConfirmationStatus);
+
+// Add the new debugEnvController endpoint to the debug router
+debugRouter.get('/list-fields-any', getEnvDebug);

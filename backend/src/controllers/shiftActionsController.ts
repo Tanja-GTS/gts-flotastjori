@@ -88,15 +88,19 @@ async function runWithConcurrency<T>(params: {
   await Promise.all(runners);
 }
 
+
 export async function postAssignAndEmail(req: Request, res: Response) {
   try {
     const itemId = String(req.params.id || '').trim();
-    const driverId = asString((req.body as any)?.driverId).trim();
+    let driverId = asString((req.body as any)?.driverId).trim();
 
-    if (!itemId || !driverId) {
-      res.status(400).json({ ok: false, error: 'Required: :id and body.driverId' });
+    if (!itemId) {
+      res.status(400).json({ ok: false, error: 'Required: :id' });
       return;
     }
+
+    // If driverId is empty, null, or 'unassigned', treat as unassign
+    const isUnassign = !driverId || driverId === 'unassigned';
 
     // Load shift details once (no trips needed for confirmation email).
     const shiftBefore = await getHydratedShiftById(itemId, { includeTrips: false });
@@ -105,9 +109,12 @@ export async function postAssignAndEmail(req: Request, res: Response) {
       return;
     }
 
-    const selectedDriver = (await resolveDrivers({ driverIds: [driverId] })).get(driverId);
+    let selectedDriver = null;
+    if (!isUnassign) {
+      selectedDriver = (await resolveDrivers({ driverIds: [driverId] })).get(driverId);
+    }
 
-    await assignDriverToShiftInstance({ itemId, driverId });
+    await assignDriverToShiftInstance({ itemId, driverId: isUnassign ? null : driverId });
 
     // Try setting pending; if SharePoint rejects it, still proceed with email.
     try {
@@ -121,7 +128,7 @@ export async function postAssignAndEmail(req: Request, res: Response) {
     const to = selectedDriver?.email || '';
     let mailOk = true;
     let mailError = '';
-    if (!to) {
+    if (!isUnassign && !to) {
       mailOk = false;
       mailError = 'Selected driver does not have an email in the Drivers list';
     }
@@ -165,7 +172,8 @@ export async function postAssignAndEmail(req: Request, res: Response) {
       </div>
     `;
 
-    if (to) {
+    // Only send email if assigning a driver
+    if (!isUnassign && to) {
       try {
         await sendConfirmationEmail({ to, subject, html, workspaceId: shiftBefore.workspaceId });
       } catch (e) {
@@ -176,7 +184,7 @@ export async function postAssignAndEmail(req: Request, res: Response) {
 
     const shift = {
       ...shiftBefore,
-      driverId,
+      driverId: isUnassign ? null : driverId,
       driverName: selectedDriver?.name,
       driverEmail: selectedDriver?.email,
       confirmationStatus: 'pending',

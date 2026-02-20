@@ -71,17 +71,23 @@ async function patchShiftInstanceFields(params: {
   await graphPatch(url, token, params.fields);
 }
 
+
 export async function assignDriverToShiftInstance(params: {
   itemId: string;
-  driverId: string;
+  driverId: string | null | undefined;
 }): Promise<void> {
   const fInst = getShiftInstancesFieldNames();
   const driverLookupKey = `${fInst.driverId}LookupId`;
+  let fields: Record<string, unknown> = {};
+  if (params.driverId == null || params.driverId === '' || params.driverId === 'unassigned') {
+    // Unassign: clear the driver lookup field
+    fields[driverLookupKey] = null;
+  } else {
+    fields[driverLookupKey] = Number(params.driverId);
+  }
   await patchShiftInstanceFields({
     itemId: params.itemId,
-    fields: {
-      [driverLookupKey]: Number(params.driverId),
-    },
+    fields,
   });
 }
 
