@@ -1,3 +1,5 @@
+      - key: SERVE_FRONTEND
+        value: "true"
 services:
   - type: web
     name: fleet-scheduler
