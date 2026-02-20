@@ -9,7 +9,7 @@ services:
     autoDeploy: true
 
     # Build: install root deps, install backend deps, build the Vite frontend into ./dist
-    buildCommand: npm install && npm run backend:install && npm run build && cp -R dist backend/
+    buildCommand: cd .. && npm install && npm run backend:install && npm run build && cp -R dist backend/
 
     # Start: run the Express backend in "single-service" mode (serves ./dist + /api)
     startCommand: npm --prefix backend run start:prod
