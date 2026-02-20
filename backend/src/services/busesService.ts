@@ -137,7 +137,8 @@ export async function listBuses(): Promise<Array<{ id: string; title: string }>>
   return allItems
     .map((item) => {
       const title =
-        // Your Buses list uses field_1 as "License Plate".
+        // Try Route first if present, then the rest.
+        asString(item.fields?.Route) ||
         asString(item.fields?.field_1) ||
         asString(item.fields?.Plate) ||
         asString(item.fields?.plate) ||
