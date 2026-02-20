@@ -12,7 +12,7 @@ services:
     buildCommand: cd .. && npm install && npm run backend:install && npm run build && cp -R dist backend/
 
     # Start: run the Express backend in "single-service" mode (serves ./dist + /api)
-    startCommand: npm --prefix backend run start:prod
+    startCommand: npm run start:prod
 
     # Render will call this to know the service is up.
     healthCheckPath: /health
