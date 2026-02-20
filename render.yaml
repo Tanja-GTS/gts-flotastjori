@@ -2,6 +2,7 @@
         value: "true"
 services:
   - type: web
+    serviceRoot: backend
     name: fleet-scheduler
     env: node
     plan: starter
