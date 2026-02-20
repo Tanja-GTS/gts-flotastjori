@@ -34,7 +34,7 @@ app.get('/health', (_req, res) => {
 // This makes production deployment simpler (single origin for frontend + /api).
 const serveFrontend = String(process.env.SERVE_FRONTEND || '').trim().toLowerCase() === 'true';
 if (serveFrontend) {
-  const distPath = path.resolve(__dirname, '..', '..', 'dist');
+  const distPath = path.resolve(__dirname, '..', 'dist'); // backend/dist
   app.use(express.static(distPath));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
