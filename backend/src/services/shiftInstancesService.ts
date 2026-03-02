@@ -150,9 +150,28 @@ function normalizeDate(value: unknown): string {
   return asString(value).slice(0, 10);
 }
 
+function normalizeConfirmationStatus(value: unknown): string | undefined {
+  if (Array.isArray(value)) value = value[0];
+  const raw = asString(value).trim();
+  if (!raw) return undefined;
+  const s = raw.toLowerCase();
+
+  // Backward-compat / older deployments
+  if (s === 'accepted') return 'assigned';
+  if (s === 'rejected') return 'declined';
+
+  // Current canonical set
+  if (s === 'assigned') return 'assigned';
+  if (s === 'pending') return 'pending';
+  if (s === 'declined') return 'declined';
+  if (s === 'unassigned') return 'unassigned';
+
+  return s;
+}
+
 function confirmationStatusRank(status?: string): number {
   const s = String(status || '').trim().toLowerCase();
-  if (s === 'accepted') return 4;
+  if (s === 'assigned') return 4;
   if (s === 'pending') return 3;
   if (s === 'rejected') return 2;
   if (s === 'unassigned') return 1;
@@ -325,7 +344,7 @@ export async function listShiftInstances(params: {
         patternId: readLookupId(fields, f.patternId) || undefined,
         driverId: readLookupId(fields, f.driverId) || undefined,
         busId: readLookupId(fields, f.busId) || undefined,
-        confirmationStatus: asString(fields[f.confirmationStatus]) || undefined,
+        confirmationStatus: normalizeConfirmationStatus(fields[f.confirmationStatus]),
         notes: asString(fields[f.notes]) || undefined,
         generated: asBoolean(fields[f.generated]),
         manualOverride: asBoolean(fields[f.manualOverride]),
@@ -613,7 +632,7 @@ export async function getHydratedShiftById(
     patternId: readLookupId(fields, f.patternId) || undefined,
     driverId: readLookupId(fields, f.driverId) || undefined,
     busId: readLookupId(fields, f.busId) || undefined,
-    confirmationStatus: asString(fields[f.confirmationStatus]) || undefined,
+    confirmationStatus: normalizeConfirmationStatus(fields[f.confirmationStatus]),
     notes: asString(fields[f.notes]) || undefined,
     generated: asBoolean(fields[f.generated]),
     manualOverride: asBoolean(fields[f.manualOverride]),

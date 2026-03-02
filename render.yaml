@@ -84,3 +84,12 @@ services:
       # Optional: email sender UPN (only needed if using Graph sendMail)
       - key: MAIL_SENDER_UPN
         sync: false
+
+      # Required: used to sign/verify email confirmation links (/confirm/:token)
+      # IMPORTANT: keep it stable across deploys or previously sent links will break.
+      - key: CONFIRM_LINK_SECRET
+        sync: false
+
+      # Optional: confirmation link expiry in days (default: 30)
+      - key: CONFIRM_LINK_TTL_DAYS
+        value: "30"

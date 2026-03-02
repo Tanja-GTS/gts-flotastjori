@@ -6,16 +6,38 @@ function requiredEnv(name) {
   return val;
 }
 
+// Explicitly disable MSAL/AUTH for fleet-scheduler-staging
 export function isMsalConfigured() {
+  // Enable MSAL if required env vars are present
   const tenantId = (import.meta.env?.VITE_ENTRA_TENANT_ID || '').trim();
   const clientId = (import.meta.env?.VITE_ENTRA_CLIENT_ID || '').trim();
   const apiScope = (import.meta.env?.VITE_ENTRA_API_SCOPE || '').trim();
-  return Boolean(tenantId && clientId && apiScope);
+  return !!(tenantId && clientId && apiScope);
 }
 
-let msalInstance;
+// Get MSAL access token if configured
+export async function getMsalAccessToken({ apiScope }) {
+  if (!isMsalConfigured()) return '';
+  // ...existing code for acquiring token...
+}
+
+// Dummy MSAL instance for staging
+function getDummyMsalInstance() {
+  return {
+    initialize: async () => {},
+    handleRedirectPromise: async () => null,
+    getActiveAccount: () => null,
+    getAllAccounts: () => [],
+    setActiveAccount: () => {},
+    loginRedirect: async () => {},
+    acquireTokenSilent: async () => ({ accessToken: '' }),
+    acquireTokenRedirect: async () => {},
+  };
+}
 
 export function getMsalInstance() {
+  if (!isMsalConfigured()) return getDummyMsalInstance();
+  // ...existing code...
   if (msalInstance) return msalInstance;
 
   const tenantId = (import.meta.env?.VITE_ENTRA_TENANT_ID || '').trim();
@@ -41,12 +63,14 @@ export function getMsalInstance() {
 }
 
 export async function ensureMsalInitialized() {
+  if (!isMsalConfigured()) return getDummyMsalInstance();
   const instance = getMsalInstance();
   await instance.initialize();
   return instance;
 }
 
 export async function getSignedInAccount() {
+  if (!isMsalConfigured()) return null;
   const instance = await ensureMsalInitialized();
   const result = await instance.handleRedirectPromise();
   if (result?.account) {
@@ -62,6 +86,7 @@ export async function getSignedInAccount() {
   return account;
 }
 
+
 export async function startLogin({ apiScope }) {
   const scope = (apiScope || '').trim() || requiredEnv('VITE_ENTRA_API_SCOPE');
   const instance = await ensureMsalInitialized();
@@ -70,37 +95,3 @@ export async function startLogin({ apiScope }) {
   });
 }
 
-export async function getMsalAccessToken({ apiScope }) {
-  const scope = (apiScope || '').trim() || requiredEnv('VITE_ENTRA_API_SCOPE');
-
-  const instance = await ensureMsalInitialized();
-
-  // If we just returned from redirect, process that first.
-  const result = await instance.handleRedirectPromise();
-  if (result?.account) {
-    instance.setActiveAccount(result.account);
-  }
-
-  const account = instance.getActiveAccount() || instance.getAllAccounts()?.[0];
-
-  if (!account) {
-    // Interactive sign-in required.
-    await instance.loginRedirect({
-      scopes: ['openid', 'profile', 'email', scope],
-    });
-    // Redirecting; return empty string for current call.
-    return '';
-  }
-
-  try {
-    const result = await instance.acquireTokenSilent({
-      account,
-      scopes: [scope],
-    });
-    return result?.accessToken || '';
-  } catch {
-    // Force interactive consent if needed.
-    await instance.acquireTokenRedirect({ scopes: [scope] });
-    return '';
-  }
-}

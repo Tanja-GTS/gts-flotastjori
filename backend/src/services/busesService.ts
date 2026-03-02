@@ -114,16 +114,16 @@ async function getBusesListId(): Promise<string> {
  * This expects MS_BUSES_LIST_ID to be set to the list ID referenced by bus lookups.
  * If not set, returns an empty list.
  */
-export async function listBuses(): Promise<Array<{ id: string; title: string }>> {
+export async function listBuses(): Promise<Array<{ id: string; title: string; routeId?: string; routeLabel?: string }>> {
   const busesListId = await getBusesListId();
   if (!busesListId) return [];
 
   const graph = getGraphConfig();
   const token = await getGraphAppToken(graph);
 
-    const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-      graph.siteId
-    )}/lists/${encodeURIComponent(busesListId)}/items?$expand=fields&$top=999`;
+  const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/items?$expand=fields&$top=999`;
 
   const allItems: GraphListItem[] = [];
   let nextUrl: string | undefined = baseUrl;
@@ -134,25 +134,57 @@ export async function listBuses(): Promise<Array<{ id: string; title: string }>>
     nextUrl = page['@odata.nextLink'];
   }
 
-  return allItems
+  // Collect all Route lookup IDs
+  const routeIds = allItems
     .map((item) => {
-      const title =
-        // Try Route first if present, then the rest.
-        asString(item.fields?.Route) ||
-        asString(item.fields?.field_1) ||
-        asString(item.fields?.Plate) ||
-        asString(item.fields?.plate) ||
-        asString(item.fields?.LicensePlate) ||
-        asString(item.fields?.licensePlate) ||
-        asString(item.fields?.Registration) ||
-        asString(item.fields?.registration) ||
-        asString(item.fields?.Title) ||
-        asString(item.fields?.LinkTitle) ||
-        asString(item.fields?.Name) ||
-        '';
-      return { id: String(item.id || ''), title: title.trim() || String(item.id || '') };
+      // Try to get RouteLookupId or Route (if it's a lookup)
+      const fields = item.fields || {};
+      return fields['RouteLookupId'] || fields['Route'] || undefined;
+    })
+    .map(asString)
+    .filter((id) => id && !isNaN(Number(id)));
+
+  // Map of busId -> bus title
+  const busIdToTitle = new Map<string, string>();
+  for (const item of allItems) {
+    const title =
+      asString(item.fields?.Plate) ||
+      asString(item.fields?.plate) ||
+      asString(item.fields?.LicensePlate) ||
+      asString(item.fields?.licensePlate) ||
+      asString(item.fields?.Registration) ||
+      asString(item.fields?.registration) ||
+      asString(item.fields?.Title) ||
+      asString(item.fields?.LinkTitle) ||
+      asString(item.fields?.Name) ||
+      '';
+    busIdToTitle.set(String(item.id || ''), title.trim() || String(item.id || ''));
+  }
+
+  // Map of routeId -> route label (bus title)
+  const routeIdToLabel = new Map<string, string>();
+  for (const item of allItems) {
+    const id = String(item.id || '');
+    const title = busIdToTitle.get(id) || id;
+    routeIdToLabel.set(id, title);
+  }
+
+  const debug: Array<{id: string; title: string; routeId: string; routeLabel: string; fields: Record<string, unknown>}> = [];
+  const result = allItems
+    .map((item) => {
+      const id = String(item.id || '');
+      const fields = item.fields || {};
+      // Route can be a lookup (RouteLookupId) or direct value
+      const routeId = asString(fields['RouteLookupId'] || fields['Route'] || '');
+      const routeLabel = routeIdToLabel.get(routeId) || '';
+      const title = busIdToTitle.get(id) || id;
+      debug.push({id, title, routeId, routeLabel, fields});
+      return { id, title, routeId: routeId || undefined, routeLabel: routeLabel || undefined };
     })
     .filter((b) => b.id);
+  // eslint-disable-next-line no-console
+  console.log('[listBuses] debug:', JSON.stringify(debug, null, 2));
+  return result;
 }
 
 /**

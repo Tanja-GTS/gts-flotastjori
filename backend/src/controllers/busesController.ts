@@ -12,6 +12,7 @@ export async function getBuses(_req: Request, res: Response) {
       ttlMs: BUSES_TTL_MS,
       factory: () => listBuses(),
     });
+    // buses now includes routeId and routeLabel
     res.json({ ok: true, buses });
   } catch (err) {
     sendApiError(res, err);

@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { IconChevronDown } from '@tabler/icons-react';
 
 export const theme = createTheme({
-  fontFamily: "'Space Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+  fontFamily: "'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   primaryColor: 'brand',
   primaryShade: { light: 6, dark: 6 },
   radius: {

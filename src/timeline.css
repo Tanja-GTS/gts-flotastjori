@@ -1,5 +1,367 @@
+/* BUTTON STYLES */
+.btn-primary {
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 14px;
+  height: 36px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
 
- :root {
+.btn-primary:hover,
+.btn-primary:focus {
+  background: #222;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: #111;
+  border: 1px solid #111;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 14px;
+  height: 36px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border 0.15s;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus {
+  background: #f6f6f6;
+  border-color: #222;
+}
+
+/* Keep typography consistent across custom controls */
+.btn-primary,
+.btn-secondary,
+.appHeader__addShift,
+.generate-shifts-btn {
+  font-family: inherit;
+}
+
+/* Fix dropdowns not being cut off */
+.mantine-Popover-dropdown {
+  min-width: 180px !important;
+  max-width: 320px;
+  z-index: 1002 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.10);
+  border-radius: 6px;
+  overflow: visible;
+}
+/* --- HEADER REDESIGN --- */
+.appHeader {
+  height: 57px;
+  width: 100%;
+  background: #FFF;
+  border-bottom: 1px solid #E5E5E7;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, sans-serif;
+  z-index: 10;
+}
+
+.appHeader__inner {
+  height: 57px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+
+.appHeader__left {
+  display: flex;
+  align-items: center;
+  height: 57px;
+}
+
+.appHeader__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 57px;
+}
+
+.appHeader__brand {
+  display: flex;
+  width: 63px;
+  height: 57px;
+  padding: 10px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 0 0 63px;
+}
+
+.appHeader__logo {
+  width: 35.05px;
+  height: 21.54px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+.appHeader__separator {
+  width: 1px;
+  height: 57px;
+  background: #E5E5E7;
+}
+
+.workspaceControl {
+  display: flex;
+  width: 239px;
+  height: 57px;
+  padding-left: 32px;
+  align-items: center;
+  gap: 24px;
+  background: transparent;
+  border: none;
+  box-sizing: border-box;
+}
+
+.workspaceControl__label {
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+
+.workspaceControl__select {
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.workspaceControl:focus-within {
+  outline: 2px solid #2D6D5D;
+  outline-offset: 2px;
+}
+
+.workspaceControl__chevron {
+  margin-left: 17px;
+  flex: 0 0 auto;
+}
+
+.workspaceControl__chevron {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: 50% 50%;
+}
+
+.workspaceControl__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.appHeader__right {
+  display: flex;
+  align-items: center;
+  height: 57px;
+  gap: 24px;
+}
+
+.appHeader__addShift {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px 8px 12px;
+  height: 36px;
+  background: #151922;
+  color: #fff;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.appHeader__addShift:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.appHeader__addShiftIcon {
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.appHeader__lang {
+  display: flex;
+  width: 41px;
+  height: 36px;
+  padding: 8px 12px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid #33363E;
+  background: #FFF;
+  color: #151922;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.appHeader__logoWrap {
+  display: flex;
+  align-items: center;
+  height: 57px;
+  width: 48px;
+}
+
+
+.workspaceControl {
+  display: flex;
+  width: 239px;
+  height: 57px;
+  padding: 0 0 0 32px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 17px;
+  background: transparent;
+  border: none;
+  box-sizing: border-box;
+}
+.workspaceControl__text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 57px;
+  gap: 0;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: flex-start;
+  text-align: left;
+}
+.workspaceControl__label {
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+.workspaceControl__value {
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+}
+.workspaceControl__chevron {
+  margin-left: 0;
+  flex: 0 0 auto;
+}
+
+.appHeader__right {
+  display: flex;
+  align-items: center;
+  height: 57px;
+  gap: 0;
+}
+
+.appHeader__actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 57px;
+  padding-left: 32px;
+}
+
+.appHeader__addShift {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 8px 16px 8px 12px;
+  background: #151922;
+  color: #fff;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 0;
+  border: none;
+  cursor: pointer;
+  gap: 4px;
+}
+.appHeader__addShift:hover {
+  background: #1d2230;
+}
+.appHeader__addShift:focus-visible {
+  outline: 2px solid #2D6D5D;
+  outline-offset: 2px;
+}
+.appHeader__addShiftIcon {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.appHeader__lang {
+  display: flex;
+  width: 41px;
+  height: 36px;
+  padding: 8px 12px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid #33363E;
+  background: #FFF;
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 0;
+  cursor: pointer;
+}
+.appHeader__lang:hover {
+  background: #F5F7F9;
+}
+.appHeader__lang:focus-visible {
+  outline: 2px solid #2D6D5D;
+  outline-offset: 2px;
+}
+
+/* --- END HEADER REDESIGN --- */
+
+body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__pill, .viewbar__pill, .workspacebar__pill {
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
+}
+:root {
   --bg: hsl(0, 0%, 100%);
   --surface: #fcfdfd;
   --surface2: #ffffff;
@@ -24,32 +386,6 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-md: 0 8px 20px rgba(0,0,0,0.08);
 
-  /* Shared “header black” so everything matches */
-  --brand-black: #151922;
-
-  /* Month/Year pill color (edit these) */
-  --month-pill-bg: var(--brand-black);
-  --month-pill-fg: #ffffff;
-
-    /* Header nav (top bar) */
-    --header-nav-bg: var(--surface);
-    --header-nav-fg: var(--brand-black);
-
-    /* Workspace pill color (white on black header) */
-    --workspace-pill-bg: #ffffff;
-    --workspace-pill-fg: #111827;
-
-  --gap-1: 8px;
-  --gap-2: 12px;
-  --gap-3: 16px;
-  --gap-4: 24px;
-}
-
-/* Month bar (month dropdown + arrows) */
-.monthbar {
-  display: flex;
-  align-items: center;
-  gap: 0;
 }
 
 .monthbar__icon {
@@ -145,79 +481,148 @@
   background: transparent;
 }
 
-.headerNav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 24px 24px 12px 24px;
-  background: var(--header-nav-bg);
-  color: var(--header-nav-fg);
-  border-bottom: 1px solid #e5e7eb;
-}
-
-/* Make Timeline fill the viewport height */
-.timelinePage {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.timelineMain {
-  flex: 1 1 auto;
-  min-height: 0; /* critical for flex children to allow scrolling */
-  padding: 0;
-}
-
-.timelineViewport {
-  width: 100%;
-  height: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
-  border: 0;
-}
-
-.timelineControlsRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 8px 0;
-  margin-left: 24px;
-  margin-right: 24px;
-  margin-top: 32px;
-  margin-bottom: 12px;
-}
-
 .timelineControlsRow__left,
 .timelineControlsRow__middle,
 .timelineControlsRow__right {
   display: flex;
   align-items: center;
-  flex: 1 1 0;
+  flex: 0 0 auto;
 }
 
-.timelineControlsRow__left {
+
+
+.timelineControlsRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: none;
+  margin: 36px 0;
+  padding: 0;
+  /* Align Month/Year control with the first header divider (after the 63px brand). */
+  padding-left: 64px;
+  /* Align Generate shifts with the EN button (same right padding as header). */
+  padding-right: 40px;
   justify-content: flex-start;
+  gap: 0;
+  flex-wrap: nowrap;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
+/* Center the middle cluster, let the surrounding space stretch */
 .timelineControlsRow__middle {
-  justify-content: center;
-  gap: 16px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
 }
 
-/* Today button: keep it standard (Mantine handles most styling) */
-.todayBtn {
-  font-weight: 500;
+/* Ensure the right cluster hugs the right padding edge */
+.timelineControlsRow__right {
+  margin-left: 0;
 }
 
-/* View dropdown: two touching blobs (label pill + chevron circle) */
-.viewbar {
+/* Match screenshot: outlined Generate button (override legacy blue rules) */
+.timelineControlsRow .generate-shifts-btn {
+  height: 36px !important;
+  padding: 0 18px !important;
+  border-radius: 0 !important;
+  border: 1px solid #151922 !important;
+  background: #fff !important;
+  color: #151922 !important;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
+  font-weight: 500 !important;
+}
+.timelineControlsRow__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.timelineControlsRow__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.monthbar, .viewbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.monthbar__pill, .viewbar__pill {
+  font-size: 14px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #222;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 400;
+  cursor: pointer;
+  transition: border 0.15s, background 0.15s;
+}
+.monthbar__pill:hover, .viewbar__pill:hover {
+  border-color: #1971c2;
+  background: #f1f3f5;
+}
+.monthbar__icon, .viewbar__icon {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.monthbar__nav {
   display: flex;
   align-items: center;
   gap: 0;
+  margin-left: 0;
+}
+.monthbar__navBtn {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: #1971c2;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.monthbar__navBtn:hover {
+  background: #f1f3f5;
+}
+.generate-shifts-btn {
+  font-size: 14px !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  border-radius: 4px !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-weight: 400 !important;
+  background: #1971c2 !important;
+  color: #fff !important;
+  border: none !important;
+}
+.generateStatus {
+  font-size: 13px;
+  margin-left: 6px;
+}
+.timelineControlsRow__left .mantine-Checkbox-root {
+  margin-left: 6px;
+}
+.timelineControlsRow__left .mantine-Checkbox-label {
+  font-size: 13px;
+}
+.timelineControlsRow__left .mantine-Checkbox-input {
+  height: 16px;
+  width: 16px;
 }
 
 .viewbar__pill {
@@ -621,6 +1026,211 @@
   border-radius: var(--control-radius) !important;
 }
 
+/* --- NAVIGATION ROW (Month/Today/View/Filter/Generate) --- */
+.timelineControlsRow {
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.timelineControlsRow .monthbar,
+.timelineControlsRow .viewbar {
+  gap: 0;
+}
+
+.timelineControlsRow .monthbar__dropdown,
+.timelineControlsRow .todayBtn,
+.timelineControlsRow .viewbar__pill,
+.timelineControlsRow .viewbar__icon,
+.timelineControlsRow .generate-shifts-btn {
+  height: 40px !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  color: #151922 !important;
+  border: 1px solid #33363E !important;
+  box-shadow: none !important;
+}
+
+/* Month/Year + arrows (section 1) */
+.timelineControlsRow .monthbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.timelineControlsRow .monthbar__dropdown {
+  display: flex;
+  padding: 8px 20px 8px 16px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #151922 !important;
+  cursor: pointer;
+}
+
+.timelineControlsRow .monthbar__text {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.timelineControlsRow .monthbar__chev {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: 50% 50%;
+}
+
+.timelineControlsRow .monthbar__dropdown.is-open .monthbar__chev {
+  transform: rotate(180deg);
+}
+
+.timelineControlsRow .monthbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: 0;
+}
+
+.timelineControlsRow .monthbar__navBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #151922;
+  cursor: pointer;
+}
+
+/* Month/year picker dropdown: prevent Selects from overflowing */
+.monthPickerGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  width: 320px;
+  max-width: 100%;
+}
+
+.monthPickerGrid .mantine-Select-root,
+.monthPickerGrid .mantine-Select-wrapper,
+.monthPickerGrid .mantine-InputWrapper-root,
+.monthPickerGrid .mantine-Input-input {
+  min-width: 0;
+}
+
+/* Section 2: Today button */
+.timelineControlsRow .todayBtn {
+  display: flex;
+  height: 40px !important;
+  padding: 12px 20px !important;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #151922 !important;
+  background: #fff !important;
+  color: #151922 !important;
+  border-radius: 0 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Section 2: View dropdown (single control) */
+.timelineControlsRow .viewDropdown {
+  display: flex;
+  height: 40px;
+  padding: 10px 16px 10px 20px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #151922;
+  background: #fff;
+  color: #151922;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.timelineControlsRow .viewDropdown__text {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.timelineControlsRow .viewDropdown__chev {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: 50% 50%;
+}
+
+.timelineControlsRow .viewDropdown.is-open .viewDropdown__chev {
+  transform: rotate(180deg);
+}
+
+.timelineControlsRow .viewbar__pill {
+  border-right: 0 !important;
+  padding: 0 16px !important;
+  min-width: 140px;
+  justify-content: center;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.timelineControlsRow .viewbar__icon {
+  width: 40px;
+  border-left: 0 !important;
+}
+
+/* Section 2: Checkbox + label */
+.timelineControlsRow .mantine-Checkbox-root {
+  display: flex;
+  width: 185px;
+  align-items: center;
+  gap: 8px;
+}
+
+.timelineControlsRow .mantine-Checkbox-input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  border: 1px solid #33363E;
+  background: #fff;
+}
+
+.timelineControlsRow .mantine-Checkbox-label {
+  color: #000;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.timelineControlsRow .generate-shifts-btn {
+  display: flex !important;
+  padding: 8px 16px 8px 12px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  border: 1px solid #151922 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  max-width: 220px;
+  overflow: hidden;
+}
+
+.timelineControlsRow .generate-shifts-btn .mantine-Button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Subtle hover (matches the crisp UI feel) */
+.timelineControlsRow .monthbar__icon:hover,
+.timelineControlsRow .monthbar__pill:hover,
+.timelineControlsRow .todayBtn:hover,
+.timelineControlsRow .viewbar__pill:hover,
+.timelineControlsRow .viewbar__icon:hover,
+.timelineControlsRow .generate-shifts-btn:hover {
+  background: #F5F7F9 !important;
+}
+
 
 .shift-card {
   background: var(--shift-card-bg);
@@ -670,10 +1280,5 @@
 .shift-driver {
   margin-top: 2px;
   font-weight: 700;
-  font-size: 13px
-;
   color: var(--text);
 }
-
-
-

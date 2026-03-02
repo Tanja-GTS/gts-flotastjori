@@ -10,6 +10,7 @@ import cors from 'cors';
 import compression from 'compression';
 import { apiRouter } from './routes';
 import { entraAuth } from './middleware/entraAuth';
+import { confirmRouter } from './routes/confirm';
 
 const app = express();
 
@@ -23,8 +24,12 @@ app.use(
 );
 app.use(compression());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 app.use('/api', entraAuth(), apiRouter);
+
+// Email confirmation pages (lightweight HTML; avoids requiring the full React app)
+app.use('/confirm', confirmRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'fleet-scheduler-backend' });

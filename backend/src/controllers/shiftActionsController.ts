@@ -10,8 +10,15 @@ import { sendConfirmationEmail } from '../services/mailService';
 import { cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
 import { optionalEnv } from '../utils/env';
+import { buildConfirmLinkToken } from '../utils/confirmLinks';
 
 function getOrigin(req: Request): string {
+  // For emails we want a stable, externally reachable origin.
+  // If APP_ORIGIN is configured, prefer it over the browser request Origin/Referer
+  // (otherwise local dev can accidentally email http://localhost links to real drivers).
+  const configured = optionalEnv('APP_ORIGIN', '').trim();
+  if (configured) return configured;
+
   const origin = String(req.get('origin') || '').trim();
   if (origin) return origin;
 
@@ -22,7 +29,7 @@ function getOrigin(req: Request): string {
     // ignore
   }
 
-  return optionalEnv('APP_ORIGIN', 'http://localhost:5174').trim() || 'http://localhost:5174';
+  return 'http://localhost:5174';
 }
 
 function asString(value: unknown): string {
@@ -88,6 +95,84 @@ async function runWithConcurrency<T>(params: {
   await Promise.all(runners);
 }
 
+export async function postAssign(req: Request, res: Response) {
+  try {
+    const itemId = String(req.params.id || '').trim();
+    let driverId = asString((req.body as any)?.driverId).trim();
+
+    if (!itemId) {
+      res.status(400).json({ ok: false, error: 'Required: :id' });
+      return;
+    }
+
+    const isUnassign = !driverId || driverId === 'unassigned';
+
+    // Validate existence (and return useful context if needed).
+    const shiftBefore = await getHydratedShiftById(itemId, { includeTrips: false });
+    if (!shiftBefore) {
+      res.status(404).json({ ok: false, error: 'Shift not found' });
+      return;
+    }
+
+    await assignDriverToShiftInstance({ itemId, driverId: isUnassign ? null : driverId });
+
+    try {
+      await setShiftInstanceConfirmationStatus({ itemId, status: isUnassign ? 'unassigned' : 'assigned' });
+    } catch {
+      // ignore
+    }
+
+    cacheInvalidatePrefix('shifts|');
+
+    res.json({ ok: true, updatedIds: [itemId] });
+  } catch (err) {
+    sendApiError(res, err);
+  }
+}
+
+export async function postAssignWeek(req: Request, res: Response) {
+  try {
+    const anchorItemId = String(req.params.id || '').trim();
+    const driverId = asString((req.body as any)?.driverId).trim();
+
+    if (!anchorItemId || !driverId) {
+      res.status(400).json({ ok: false, error: 'Required: :id and body.driverId' });
+      return;
+    }
+
+    const weekInfo = await getHydratedWeekShiftsForAnchor({ anchorItemId });
+    if (!weekInfo || weekInfo.shifts.length === 0) {
+      res.status(404).json({ ok: false, error: 'No shifts found for that group/week' });
+      return;
+    }
+
+    const concurrency = Math.max(1, Math.min(12, Number(optionalEnv('ASSIGN_CONCURRENCY', '6')) || 6));
+    await runWithConcurrency({
+      items: weekInfo.shifts,
+      concurrency,
+      worker: async (s) => {
+        await assignDriverToShiftInstance({ itemId: s.id, driverId });
+        try {
+          await setShiftInstanceConfirmationStatus({ itemId: s.id, status: 'assigned' });
+        } catch {
+          // ignore
+        }
+      },
+    });
+
+    cacheInvalidatePrefix('shifts|');
+
+    res.json({
+      ok: true,
+      updatedIds: weekInfo.shifts.map((s) => s.id),
+      weekStart: weekInfo.weekStart,
+      weekEnd: weekInfo.weekEnd,
+    });
+  } catch (err) {
+    sendApiError(res, err);
+  }
+}
+
 
 export async function postAssignAndEmail(req: Request, res: Response) {
   try {
@@ -134,7 +219,8 @@ export async function postAssignAndEmail(req: Request, res: Response) {
     }
 
     const origin = getOrigin(req);
-    const confirmUrl = `${origin}/confirm-shift?token=${encodeURIComponent(itemId)}`;
+    const confirmToken = buildConfirmLinkToken({ shiftId: itemId });
+    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}`;
 
     const weekStart = weekStartMonday(shiftBefore.date);
     const weekRange = formatWeekRangeLabel(weekStart);
@@ -162,12 +248,13 @@ export async function postAssignAndEmail(req: Request, res: Response) {
           ${weekPartLabel ? `<li><strong>Week group:</strong> ${weekPartLabel}</li>` : ''}
           <li><strong>Time:</strong> ${shiftBefore.time}</li>
         </ul>
-        <p>
-          <a href="${confirmUrl}" style="display:inline-block;padding:10px 14px;background:#1971c2;color:#fff;text-decoration:none;border-radius:6px">
-            Confirm / Decline shift
+        <p style="margin-top:14px">
+          <a href="${confirmUrl}" style="display:inline-block;padding:10px 14px;background:#1971c2;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">
+            Confirm shift
           </a>
         </p>
-        <p>If the button doesn't work, open this link:</p>
+        <p style="margin-top:14px;color:#495057">If you want to decline the shift, call your fleet manager.</p>
+        <p style="margin-top:14px">If the button doesn't work, open this link:</p>
         <p><a href="${confirmUrl}">${confirmUrl}</a></p>
       </div>
     `;
@@ -249,7 +336,8 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
 
     const origin = getOrigin(req);
     const weekToken = `week:${anchorItemId}`;
-    const confirmUrl = `${origin}/confirm-shift?token=${encodeURIComponent(weekToken)}`;
+    const confirmToken = buildConfirmLinkToken({ shiftId: weekToken });
+    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}`;
 
     const subject = `Please confirm: ${routeDisplay}${routeCodePart} (${weekInfo.anchor.time})${weekPartText} — week ${weekRange}`;
 
@@ -290,12 +378,13 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
         <p style="margin-top:12px">
           Please confirm whether you can take <strong>all</strong> shifts listed above:
         </p>
-        <p>
-          <a href="${confirmUrl}" style="display:inline-block;padding:10px 14px;background:#1971c2;color:#fff;text-decoration:none;border-radius:6px">
-            Confirm / Decline
+        <p style="margin-top:14px">
+          <a href="${confirmUrl}" style="display:inline-block;padding:10px 14px;background:#1971c2;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">
+            Confirm shift
           </a>
         </p>
-        <p>If the button doesn't work, open this link:</p>
+        <p style="margin-top:14px;color:#495057">If you want to decline the shift, call your fleet manager.</p>
+        <p style="margin-top:14px">If the button doesn't work, open this link:</p>
         <p><a href="${confirmUrl}">${confirmUrl}</a></p>
       </div>
     `;
@@ -335,15 +424,19 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
 export async function getShiftById(req: Request, res: Response) {
   try {
     const itemId = String(req.params.id || '').trim();
+    console.log('[getShiftById] Requested shift ID:', itemId);
     if (!itemId) {
+      console.error('[getShiftById] Missing :id');
       res.status(400).json({ ok: false, error: 'Missing :id' });
       return;
     }
 
     if (itemId.startsWith('week:')) {
       const anchorItemId = itemId.slice('week:'.length).trim();
+      console.log('[getShiftById] Week token, anchorItemId:', anchorItemId);
       const weekInfo = await getHydratedWeekShiftsForAnchor({ anchorItemId });
       if (!weekInfo || weekInfo.shifts.length === 0) {
+        console.error('[getShiftById] Week not found for anchorItemId:', anchorItemId);
         res.status(404).json({ ok: false, error: 'Week not found' });
         return;
       }
@@ -379,6 +472,7 @@ export async function getShiftById(req: Request, res: Response) {
         })),
       };
 
+      console.log('[getShiftById] Returning week shift:', shift);
       res.json({ ok: true, shift });
       return;
     }
@@ -386,12 +480,15 @@ export async function getShiftById(req: Request, res: Response) {
     // Confirm page doesn't need trips; keep it lean.
     const shift = await getHydratedShiftById(itemId, { includeTrips: false });
     if (!shift) {
+      console.error('[getShiftById] Shift not found for itemId:', itemId);
       res.status(404).json({ ok: false, error: 'Shift not found' });
       return;
     }
 
+    console.log('[getShiftById] Returning shift:', shift);
     res.json({ ok: true, shift });
   } catch (err) {
+    console.error('[getShiftById] Error:', err);
     sendApiError(res, err);
   }
 }

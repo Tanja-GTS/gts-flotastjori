@@ -8,7 +8,7 @@ import './timeline.css';
 import { selectRoutesForWorkspace, selectVisibleShifts } from './domain/selectors';
 import { SHIFT_TYPES_ORDERED, SHIFT_TYPE_LABELS, isShiftType } from './domain/shiftTypes';
 import { getTripsForShift } from './domain/tripsTemplate';
-import { assignWeekAndEmail } from './data/backendApi';
+import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekOnly } from './data/backendApi';
 import { notifications } from '@mantine/notifications';
 import { useI18n } from './i18n';
 
@@ -46,7 +46,6 @@ export default function Timeline({
   busOptions = [],
   driverOptions = [],
   onRangeChange,
-  onRefresh,
   onGenerate,
   isLoading = false,
   isGenerating = false,
@@ -72,7 +71,9 @@ export default function Timeline({
   const [selectedShiftToken, setSelectedShiftToken] = useState(null);
   const [selectedRowKey, setSelectedRowKey] = useState(null);
   const [editedDriverId, setEditedDriverId] = useState(null);
+  const [assignOnlyThisShift, setAssignOnlyThisShift] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [assigningMode, setAssigningMode] = useState(null);
   const [assignError, setAssignError] = useState('');
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [viewDays, setViewDays] = useState(7);
@@ -101,6 +102,10 @@ export default function Timeline({
   const [monthYearOpened, setMonthYearOpened] = useState(false);
   const [workspaceOpened, setWorkspaceOpened] = useState(false);
   const [viewOpened, setViewOpened] = useState(false);
+
+  useEffect(() => {
+    if (selectedShiftToken) setAssignOnlyThisShift(false);
+  }, [selectedShiftToken]);
 
   const visibleShifts = selectVisibleShifts(shifts, workspaceId, routes);
 
@@ -447,111 +452,108 @@ export default function Timeline({
   return (
     <div className="timelinePage">
 
-     <div className="headerNav">
-  <div className="topbar">
-  <Popover
-    opened={workspaceOpened}
-    onChange={setWorkspaceOpened}
-    position="bottom-start"
-    withArrow
-    shadow="md"
-  >
-    <Popover.Target>
-      <div className="workspacebar">
-        <button
-          className="workspacebar__pill"
-          type="button"
-          aria-label="Select workspace"
-          aria-expanded={workspaceOpened}
-          aria-controls="workspace-menu"
-          onClick={() => setWorkspaceOpened((o) => !o)}
-        >
-          {workspaceOptions.find((o) => o.value === workspaceId)?.label || 'Select workspace'}
-        </button>
+      <header className="appHeader">
+        <div className="appHeader__inner">
+          <div className="appHeader__left">
+            <div className="appHeader__brand" aria-label="Fleet Scheduler">
+              <img className="appHeader__logo" src="/logo.svg" alt="GTS" />
+            </div>
 
-        <button
-          className={`workspacebar__icon${workspaceOpened ? ' is-open' : ''}`}
-          type="button"
-          aria-label="Open workspace menu"
-          aria-expanded={workspaceOpened}
-          aria-controls="workspace-menu"
-          onClick={() => setWorkspaceOpened((o) => !o)}
-        >
-          <IconChevronDown className="workspacebar__chev" size={18} aria-hidden="true" />
-        </button>
-      </div>
-    </Popover.Target>
+            <div className="appHeader__separator" aria-hidden="true" />
 
-    <Popover.Dropdown>
-      <div className="workspacebar__menu" id="workspace-menu" role="menu" aria-label="Workspaces">
-        {workspaceOptions.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            className={`workspacebar__option${opt.value === workspaceId ? ' is-selected' : ''}`}
-            role="menuitemradio"
-            aria-checked={opt.value === workspaceId}
-            onClick={() => {
-              setWorkspaceId(opt.value);
-              setWorkspaceOpened(false);
-            }}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </Popover.Dropdown>
-  </Popover>
-</div>
+            <Popover
+              opened={workspaceOpened}
+              onChange={setWorkspaceOpened}
+              position="bottom-start"
+              withArrow
+              shadow="md"
+            >
+              <Popover.Target>
+                <button
+                  className="workspaceControl"
+                  type="button"
+                  aria-label="Workspace"
+                  aria-expanded={workspaceOpened}
+                  aria-controls="workspace-menu"
+                  onClick={() => setWorkspaceOpened((o) => !o)}
+                >
+                  <div className="workspaceControl__text">
+                    <div className="workspaceControl__label">Workspace</div>
+                    <div className="workspaceControl__value">
+                      {workspaceOptions.find((w) => w.value === workspaceId)?.label || 'Select workspace'}
+                    </div>
+                  </div>
+                  <svg
+                    className={`workspaceControl__chevron${workspaceOpened ? ' is-open' : ''}`}
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6 9l6 6 6-6"
+                      stroke="#151922"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </Popover.Target>
 
-  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-    <Select
-      aria-label={t('lang.label')}
-      data={[
-        { value: 'en', label: 'EN' },
-        { value: 'is', label: 'ÍS' },
-      ]}
-      value={lang}
-      onChange={(v) => v && setLang(v)}
-      allowDeselect={false}
-      variant="unstyled"
-      rightSection={<IconChevronDown size={16} aria-hidden="true" />}
-      rightSectionWidth={18}
-      style={{ width: 64 }}
-      styles={{
-        input: {
-          height: 36,
-          background: 'transparent',
-          border: 0,
-          boxShadow: 'none',
-          paddingLeft: 0,
-          paddingRight: 18,
-          fontSize: 14,
-          fontWeight: 500,
-          letterSpacing: '0.02em',
-          color: 'var(--header-nav-fg)',
-        },
-        section: {
-          height: 36,
-          color: 'var(--header-nav-fg)',
-          opacity: 0.9,
-        },
-        dropdown: {
-          borderRadius: 12,
-          border: '1px solid rgba(17, 24, 39, 0.10)',
-          boxShadow: '0 8px 20px rgba(0,0,0,0.10)',
-        },
-        option: {
-          fontSize: 13,
-          fontWeight: 500,
-        },
-      }}
-    />
-  </div>
-</div>
-     
-      <header>
-        {/* Intentionally empty: header controls are rendered in the controls row below */}
+              <Popover.Dropdown>
+                <div className="viewbar__menu" id="workspace-menu" role="menu" aria-label="Workspaces">
+                  {workspaceOptions.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`viewbar__option${opt.value === workspaceId ? ' is-selected' : ''}`}
+                      role="menuitemradio"
+                      aria-checked={opt.value === workspaceId}
+                      onClick={() => {
+                        setWorkspaceId(opt.value);
+                        setWorkspaceOpened(false);
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </Popover.Dropdown>
+            </Popover>
+
+            <div className="appHeader__separator" aria-hidden="true" />
+          </div>
+
+          <div className="appHeader__spacer" aria-hidden="true" />
+
+          <div className="appHeader__right">
+            <div className="appHeader__separator" aria-hidden="true" />
+            <div className="appHeader__actions">
+              <button
+                className="appHeader__addShift"
+                type="button"
+                onClick={() => setAddMode(true)}
+                aria-label="Add a shift"
+              >
+                <span className="appHeader__addShiftIcon" aria-hidden="true">
+                  +
+                </span>
+                Add a shift
+              </button>
+              <button
+                className="appHeader__lang"
+                type="button"
+                aria-label={t('lang.label')}
+                onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
+              >
+                {lang === 'is' ? 'ÍS' : 'EN'}
+              </button>
+            </div>
+          </div>
+        </div>
       </header>
 
 
@@ -573,11 +575,6 @@ export default function Timeline({
           role="alert"
         >
           <div style={{ flex: 1, minWidth: 0 }}>{loadError}</div>
-          {typeof onRefresh === 'function' && (
-            <Button size="xs" variant="outline" color="red" onClick={() => onRefresh()}>
-              Retry
-            </Button>
-          )}
         </div>
       )}
       <div className="timelineControlsRow">
@@ -594,21 +591,15 @@ export default function Timeline({
             <Popover.Target>
               <div className="monthbar">
                 <button
-                  className={`monthbar__icon${monthYearOpened ? ' is-open' : ''}`}
-                  type="button"
-                  aria-label="Open month picker"
-                  onClick={() => setMonthYearOpened((o) => !o)}
-                >
-                  <IconChevronDown className="monthbar__chev" size={20} aria-hidden="true" />
-                </button>
-
-                <button
-                  className="monthbar__pill"
+                  className={`monthbar__dropdown${monthYearOpened ? ' is-open' : ''}`}
                   type="button"
                   aria-label="Select month and year"
                   onClick={() => setMonthYearOpened((o) => !o)}
                 >
-                  {currentWeekStart.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                  <IconChevronDown className="monthbar__chev" size={18} aria-hidden="true" />
+                  <span className="monthbar__text">
+                    {currentWeekStart.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                  </span>
                 </button>
 
                 <div className="monthbar__nav" aria-label="Change week">
@@ -634,7 +625,7 @@ export default function Timeline({
             </Popover.Target>
 
             <Popover.Dropdown>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minWidth: 320 }}>
+                <div className="monthPickerGrid">
                 <Select
                   aria-label={t('common.month')}
                   data={monthOptions}
@@ -681,7 +672,6 @@ export default function Timeline({
           <Button
             variant="default"
             className="todayBtn"
-            styles={{ root: { height: 36 } }}
             onClick={handleToday}
             aria-label="Go to current week"
           >
@@ -695,33 +685,23 @@ export default function Timeline({
             shadow="md"
           >
             <Popover.Target>
-              <div className="viewbar">
-                <button
-                  className="viewbar__pill"
-                  type="button"
-                  aria-label="Select view"
-                  aria-expanded={viewOpened}
-                  aria-controls="view-menu"
-                  onClick={() => setViewOpened((o) => !o)}
-                >
+              <button
+                className={`viewDropdown${viewOpened ? ' is-open' : ''}`}
+                type="button"
+                aria-label="Select view"
+                aria-expanded={viewOpened}
+                aria-controls="view-menu"
+                onClick={() => setViewOpened((o) => !o)}
+              >
+                <span className="viewDropdown__text">
                   {viewDays === 7
                     ? t('timeline.view1Week')
                     : viewDays === 14
                       ? t('timeline.view2Weeks')
                       : `${viewDays} days`}
-                </button>
-
-                <button
-                  className={`viewbar__icon${viewOpened ? ' is-open' : ''}`}
-                  type="button"
-                  aria-label="Open view menu"
-                  aria-expanded={viewOpened}
-                  aria-controls="view-menu"
-                  onClick={() => setViewOpened((o) => !o)}
-                >
-                  <IconChevronDown className="viewbar__chev" size={18} aria-hidden="true" />
-                </button>
-              </div>
+                </span>
+                <IconChevronDown className="viewDropdown__chev" size={18} aria-hidden="true" />
+              </button>
             </Popover.Target>
 
             <Popover.Dropdown>
@@ -759,7 +739,6 @@ export default function Timeline({
           {!hasShiftsInMonth && (
             <Button
               variant="default"
-              styles={{ root: { height: 40 } }}
               className="generate-shifts-btn"
               disabled={!onGenerate || isGenerating}
               loading={isGenerating}
@@ -796,15 +775,6 @@ export default function Timeline({
               {generateResultSummary}
             </div>
           ) : null}
-          <Button
-            radius={9999}
-            styles={{ root: { height: 40 } }}
-            className="add-shift-btn"
-            onClick={() => setAddMode(true)}
-            aria-label={t('timeline.addShift')}
-          >
-            {t('timeline.addShift')}
-          </Button>
         </div>
       </div>
 
@@ -970,9 +940,9 @@ export default function Timeline({
                           {shift.driver === 'Unassigned' ? t('common.unassignedUpper') : shift.driver}
                         </div>
                         {shift.confirmationStatus !== 'unassigned' && (
-                          <div className="shift-status" style={{ color: shift.confirmationStatus === 'pending' ? '#b36a00' : shift.confirmationStatus === 'accepted' ? '#1971c2' : '#b00020', fontWeight: 600 }}>
+                          <div className="shift-status" style={{ color: shift.confirmationStatus === 'pending' ? '#b36a00' : shift.confirmationStatus === 'assigned' ? '#1971c2' : '#b00020', fontWeight: 600 }}>
                             {shift.confirmationStatus === 'pending' && 'Pending'}
-                            {shift.confirmationStatus === 'accepted' && 'Accepted'}
+                            {shift.confirmationStatus === 'assigned' && 'Assigned'}
                             {shift.confirmationStatus === 'declined' && 'Declined'}
                           </div>
                         )}
@@ -1167,22 +1137,86 @@ export default function Timeline({
                   mt="sm"
                 />
 
-                <p style={{ fontSize: 13, color: '#555', marginTop: 12 }}>
-                  Assigning will email the selected driver a confirmation link.
-                </p>
+                <Checkbox
+                  style={{ marginTop: 10 }}
+                  label="Assign only this shift"
+                  checked={assignOnlyThisShift}
+                  onChange={(e) => setAssignOnlyThisShift(e.currentTarget.checked)}
+                />
 
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
                   <Button
-                    mt="md"
-                    loading={isAssigning}
-                    disabled={!selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
+                    loading={isAssigning && assigningMode === 'assign'}
+                    disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
                     onClick={async () => {
                       if (!selectedShiftToken || !editedDriverId) return;
 
+                      setAssigningMode('assign');
                       setIsAssigning(true);
                       setAssignError('');
                       try {
-                        const result = await assignWeekAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId });
+                        const result = assignOnlyThisShift
+                          ? await assignDriverOnly({ shiftId: selectedShiftToken, driverId: editedDriverId })
+                          : await assignWeekOnly({ shiftId: selectedShiftToken, driverId: editedDriverId });
+
+                        const opt = driverById.get(String(editedDriverId));
+                        const displayName = opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || 'Unassigned';
+
+                        const updatedIds = Array.isArray(result?.updatedIds) ? result.updatedIds : [selectedShiftToken];
+                        const updatedCount = updatedIds.length;
+
+                        notifications.show({
+                          title: 'Assigned',
+                          message: updatedCount > 1 ? `Assigned ${updatedCount} shifts.` : `Assigned ${displayName}.`,
+                          color: 'blue',
+                        });
+
+                        const updated = new Set(updatedIds);
+                        setShifts((prev) =>
+                          prev.map((s) =>
+                            updated.has(s.token)
+                              ? {
+                                  ...s,
+                                  driverId: String(editedDriverId),
+                                  driver: displayName,
+                                  confirmationStatus: 'assigned',
+                                }
+                              : s
+                          )
+                        );
+
+                        setSelectedShiftToken(null);
+                      } catch (e) {
+                        const msg = e instanceof Error ? e.message : 'Failed to assign driver';
+                        setAssignError(msg);
+                        notifications.show({
+                          title: 'Failed to assign',
+                          message: msg,
+                          color: 'red',
+                        });
+                      } finally {
+                        setIsAssigning(false);
+                        setAssigningMode(null);
+                      }
+                    }}
+                  >
+                    Assign
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    loading={isAssigning && assigningMode === 'request'}
+                    disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
+                    onClick={async () => {
+                      if (!selectedShiftToken || !editedDriverId) return;
+
+                      setAssigningMode('request');
+                      setIsAssigning(true);
+                      setAssignError('');
+                      try {
+                        const result = assignOnlyThisShift
+                          ? await assignDriverAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId })
+                          : await assignWeekAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId });
 
                         const opt = driverById.get(String(editedDriverId));
                         const displayName = opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || 'Unassigned';
@@ -1191,22 +1225,19 @@ export default function Timeline({
                         const mailedTo = result?.mailedTo || opt?.email || '';
                         const mailError = typeof result?.mailError === 'string' ? result.mailError : '';
 
-                        const updatedCount = Array.isArray(result?.updatedIds) ? result.updatedIds.length : 1;
+                        const updatedIds = Array.isArray(result?.updatedIds) ? result.updatedIds : [selectedShiftToken];
+                        const updatedCount = updatedIds.length;
 
                         if (mailOk) {
                           notifications.show({
-                            title: 'Email sent',
-                            message: mailedTo
-                              ? `Confirmation sent to ${mailedTo}`
-                              : `Confirmation email sent to ${displayName}`,
+                            title: 'Request sent',
+                            message: mailedTo ? `Sent to ${mailedTo}` : `Sent to ${displayName}`,
                             color: 'blue',
                           });
                         } else {
                           notifications.show({
-                            title: 'Assigned (email not sent)',
-                            message:
-                              mailError ||
-                              'The shift was assigned, but email sending is not configured.',
+                            title: 'Assigned (request not sent)',
+                            message: mailError || 'The shift was assigned, but email sending is not configured.',
                             color: 'yellow',
                           });
                         }
@@ -1219,8 +1250,7 @@ export default function Timeline({
                           });
                         }
 
-                        const updated = new Set(result?.updatedIds || [selectedShiftToken]);
-
+                        const updated = new Set(updatedIds);
                         setShifts((prev) =>
                           prev.map((s) =>
                             updated.has(s.token)
@@ -1236,33 +1266,40 @@ export default function Timeline({
 
                         setSelectedShiftToken(null);
                       } catch (e) {
-                        const msg = e instanceof Error ? e.message : 'Failed to assign driver';
+                        const msg = e instanceof Error ? e.message : 'Failed to send request';
                         setAssignError(msg);
                         notifications.show({
-                          title: 'Failed to send email',
+                          title: 'Failed to send request',
                           message: msg,
                           color: 'red',
                         });
                       } finally {
                         setIsAssigning(false);
+                        setAssigningMode(null);
                       }
                     }}
                   >
-                    Assign & email
+                    Send a request
                   </Button>
-
-                  {selectedShift?.manual && (
-                    <div style={{ marginTop: 8, fontSize: 13, color: '#777' }}>
-                      Manual shifts can’t be emailed because they aren’t saved to SharePoint.
-                    </div>
-                  )}
-
-                  {assignError && (
-                    <div role="alert" style={{ marginTop: 8, fontSize: 13, color: '#b00020', fontWeight: 600 }}>
-                      {assignError}
-                    </div>
-                  )}
                 </div>
+
+                <div style={{ marginTop: 12, fontSize: 12, color: '#33363E' }}>
+                  By default, the shift type is applied to the whole week.
+                  <br />
+                  Tick the checkbox if you want to assign a driver to a specific shift instead.
+                </div>
+
+                {selectedShift?.manual && (
+                  <div style={{ marginTop: 8, fontSize: 13, color: '#777' }}>
+                    Manual shifts can’t be assigned/emailed because they aren’t saved to SharePoint.
+                  </div>
+                )}
+
+                {assignError && (
+                  <div role="alert" style={{ marginTop: 8, fontSize: 13, color: '#b00020', fontWeight: 600 }}>
+                    {assignError}
+                  </div>
+                )}
               </div>
 
               <hr style={{ margin: '16px 0' }} />

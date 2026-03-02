@@ -63,6 +63,7 @@ function normalizeShift(apiShift) {
 
 export default function App() {
   const { t } = useI18n();
+  // Enable authentication if MSAL is configured
   const msalConfigured = isMsalConfigured();
   const [authStatus, setAuthStatus] = useState(msalConfigured ? 'checking' : 'disabled');
   const [authError, setAuthError] = useState('');
@@ -136,7 +137,15 @@ export default function App() {
       .then((buses) => {
         if (cancelled) return;
         const opts = (buses || [])
-          .map((b) => ({ value: b.title, label: b.title }))
+          .map((b) => ({
+            value: b.id, // Use bus id as value
+            label: b.routeLabel && b.routeLabel !== b.title
+              ? `${b.title} (${b.routeLabel})`
+              : b.title,
+            title: b.title,
+            routeLabel: b.routeLabel || '',
+            id: b.id,
+          }))
           .filter((o) => o.value);
         setBusOptions(opts);
       })
@@ -259,46 +268,7 @@ export default function App() {
   );
 
 
-  if (msalConfigured && authStatus !== 'signed-in') {
-    return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 520, width: '100%', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 20 }}>
-          <h2 style={{ margin: 0, marginBottom: 8 }}>Sign in</h2>
-          <p style={{ marginTop: 0, opacity: 0.85 }}>
-            This app is protected. Please sign in with your Microsoft account to continue.
-          </p>
-          {authError ? (
-            <p style={{ marginTop: 0, color: '#ffb3b3' }}>
-              {authError}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              setAuthError('');
-              setAuthStatus('signing-in');
-              startLogin({ apiScope: import.meta.env?.VITE_ENTRA_API_SCOPE }).catch((e) => {
-                setAuthStatus('signed-out');
-                setAuthError(e instanceof Error ? e.message : 'Login failed');
-              });
-            }}
-            style={{
-              width: '100%',
-              height: 44,
-              borderRadius: 9999,
-              border: '1px solid rgba(17, 24, 39, 0.18)',
-              background: '#111827',
-              color: '#ffffff',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {authStatus === 'signing-in' ? 'Signing in…' : 'Sign in with Microsoft'}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ...existing code...
 
   return (
     <ErrorBoundary>
@@ -327,6 +297,12 @@ export default function App() {
         />
         <Route
           path="/confirm-shift"
+          element={
+            <ConfirmShift shifts={shifts} setShifts={setShifts} workspaceId={workspaceId} />
+          }
+        />
+        <Route
+          path="/confirm-shift/:token"
           element={
             <ConfirmShift shifts={shifts} setShifts={setShifts} workspaceId={workspaceId} />
           }

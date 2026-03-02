@@ -146,10 +146,28 @@ export async function assignDriverAndEmail({ shiftId, driverId }) {
   });
 }
 
+export async function assignDriverOnly({ shiftId, driverId }) {
+  const base = getBaseUrl();
+  return fetchJson(`${base}/api/shifts/${encodeURIComponent(shiftId)}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driverId }),
+  });
+}
+
 // Assign + email for the whole week-group (weekdays or weekend) that the clicked shift belongs to.
 export async function assignWeekAndEmail({ shiftId, driverId }) {
   const base = getBaseUrl();
   return fetchJson(`${base}/api/shifts/${encodeURIComponent(shiftId)}/assign-week-and-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ driverId }),
+  });
+}
+
+export async function assignWeekOnly({ shiftId, driverId }) {
+  const base = getBaseUrl();
+  return fetchJson(`${base}/api/shifts/${encodeURIComponent(shiftId)}/assign-week`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ driverId }),

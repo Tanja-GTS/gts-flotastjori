@@ -1,5 +1,5 @@
 import { Button, Stack, Text, Group } from '@mantine/core';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { confirmShift, fetchShiftById } from './data/backendApi';
 import { notifications } from '@mantine/notifications';
@@ -7,8 +7,9 @@ import { useI18n } from './i18n';
 
 export default function ConfirmShift({ shifts, setShifts }) {
   const { lang, setLang, t, locale } = useI18n();
+  const routeParams = useParams();
   const [params] = useSearchParams();
-  const token = params.get('token');
+  const token = params.get('token') || routeParams?.token || null;
   const localShift = useMemo(() => shifts.find((s) => s.token === token), [shifts, token]);
   const [shift, setShift] = useState(localShift || null);
   const isWeekToken = Boolean(token && token.startsWith('week:'));
@@ -146,15 +147,15 @@ export default function ConfirmShift({ shifts, setShifts }) {
 
       notifications.show({
         title:
-          nextStatus === 'accepted'
+          nextStatus === 'assigned'
             ? isWeekToken
-              ? t('confirm.weekAccepted')
-              : t('confirm.shiftAccepted')
+              ? t('confirm.weekAssigned')
+              : t('confirm.shiftAssigned')
             : isWeekToken
               ? t('confirm.weekDeclined')
               : t('confirm.shiftDeclined'),
         message: t('confirm.responseSaved'),
-        color: nextStatus === 'accepted' ? 'green' : 'red',
+        color: nextStatus === 'assigned' ? 'green' : 'red',
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : t('confirm.failedToUpdate'));
@@ -264,7 +265,7 @@ export default function ConfirmShift({ shifts, setShifts }) {
           size="xl"
           color="green"
           loading={isSaving}
-          onClick={() => updateStatus('accepted')}
+          onClick={() => updateStatus('assigned')}
         >
           {shift.kind === 'week' ? t('confirm.acceptWeek') : t('confirm.acceptShift')}
         </Button>
