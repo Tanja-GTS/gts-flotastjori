@@ -33,7 +33,38 @@ app.use('/api', entraAuth(), apiRouter);
 app.use('/confirm', confirmRouter);
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'fleet-scheduler-backend' });
+  const serveFrontendEnv = String(process.env.SERVE_FRONTEND || '').trim().toLowerCase();
+  const isRender = Boolean(process.env.RENDER) || Boolean(process.env.RENDER_EXTERNAL_URL) || Boolean(process.env.RENDER_SERVICE_ID);
+  const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+  const serveFrontend = serveFrontendEnv === 'true' || ((isRender || isProd) && serveFrontendEnv !== 'false');
+
+  // Render commonly exposes a git commit SHA in env; fall back to empty.
+  const gitCommit =
+    String(process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.COMMIT_SHA || '').trim() || null;
+
+  const distCandidates = [
+    path.resolve(__dirname, '..', 'dist'),
+    path.resolve(__dirname, '..', '..', 'dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), '..', 'dist'),
+  ];
+  const distFound = distCandidates.some((p) => {
+    try {
+      return fs.existsSync(path.join(p, 'index.html'));
+    } catch {
+      return false;
+    }
+  });
+
+  res.json({
+    ok: true,
+    service: 'fleet-scheduler-backend',
+    gitCommit,
+    render: isRender,
+    nodeEnv: String(process.env.NODE_ENV || ''),
+    serveFrontend,
+    distFound,
+  });
 });
 
 // Optional: serve the built frontend from this same server.
