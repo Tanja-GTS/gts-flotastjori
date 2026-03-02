@@ -32,6 +32,26 @@ app.use('/api', entraAuth(), apiRouter);
 // Email confirmation pages (lightweight HTML; avoids requiring the full React app)
 app.use('/confirm', confirmRouter);
 
+type DistPick = { distPath: string; distLocation: 'backend/dist' | 'repo/dist' | 'cwd/dist' | 'parent/dist' };
+
+function pickDist(): DistPick | null {
+  const candidates: Array<DistPick> = [
+    { distLocation: 'backend/dist', distPath: path.resolve(__dirname, '..', 'dist') },
+    { distLocation: 'repo/dist', distPath: path.resolve(__dirname, '..', '..', 'dist') },
+    { distLocation: 'cwd/dist', distPath: path.resolve(process.cwd(), 'dist') },
+    { distLocation: 'parent/dist', distPath: path.resolve(process.cwd(), '..', 'dist') },
+  ];
+
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c.distPath, 'index.html'))) return c;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 app.get('/health', (_req, res) => {
   const serveFrontendEnv = String(process.env.SERVE_FRONTEND || '').trim().toLowerCase();
   const isRender = Boolean(process.env.RENDER) || Boolean(process.env.RENDER_EXTERNAL_URL) || Boolean(process.env.RENDER_SERVICE_ID);
@@ -42,19 +62,8 @@ app.get('/health', (_req, res) => {
   const gitCommit =
     String(process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.COMMIT_SHA || '').trim() || null;
 
-  const distCandidates = [
-    path.resolve(__dirname, '..', 'dist'),
-    path.resolve(__dirname, '..', '..', 'dist'),
-    path.resolve(process.cwd(), 'dist'),
-    path.resolve(process.cwd(), '..', 'dist'),
-  ];
-  const distFound = distCandidates.some((p) => {
-    try {
-      return fs.existsSync(path.join(p, 'index.html'));
-    } catch {
-      return false;
-    }
-  });
+  const pickedDist = pickDist();
+  const distFound = Boolean(pickedDist);
 
   res.json({
     ok: true,
@@ -64,6 +73,7 @@ app.get('/health', (_req, res) => {
     nodeEnv: String(process.env.NODE_ENV || ''),
     serveFrontend,
     distFound,
+    distLocation: pickedDist?.distLocation || null,
   });
 });
 
@@ -75,24 +85,7 @@ const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'prod
 const serveFrontend = serveFrontendEnv === 'true' || ((isRender || isProd) && serveFrontendEnv !== 'false');
 
 function pickDistPath(): string | null {
-  const candidates = [
-    // When running from backend/ (Render serviceRoot=backend): backend/dist
-    path.resolve(__dirname, '..', 'dist'),
-    // When running from repo root without copying dist: ../dist (from backend/src)
-    path.resolve(__dirname, '..', '..', 'dist'),
-    // Fallbacks based on cwd
-    path.resolve(process.cwd(), 'dist'),
-    path.resolve(process.cwd(), '..', 'dist'),
-  ];
-
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(path.join(p, 'index.html'))) return p;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
+  return pickDist()?.distPath ?? null;
 }
 
 if (serveFrontend) {

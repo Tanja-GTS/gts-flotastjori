@@ -1,16 +1,18 @@
 services:
   - type: web
-    serviceRoot: backend
     name: fleet-scheduler
     env: node
     plan: starter
     autoDeploy: true
 
-    # Build: install root deps, install backend deps, build the Vite frontend into ./dist
-    buildCommand: cd .. && npm install && npm run backend:install && npm run build && cp -R dist backend/
+    # Build + start from the repo root so we can build the Vite frontend.
+    rootDir: .
 
-    # Start: run the Express backend in "single-service" mode (serves ./dist + /api)
-    startCommand: npm run start:prod
+    # Build: install deps (including devDeps for Vite), build Vite frontend into ./dist, and copy into backend/dist
+    buildCommand: npm install --include=dev && npm run render:build
+
+    # Start: run the Express backend in "single-service" mode (serves frontend + /api)
+    startCommand: npm run render:start
 
     # Render will call this to know the service is up.
     healthCheckPath: /health

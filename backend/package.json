@@ -10,6 +10,8 @@
     "generate:shifts": "tsx src/scripts/generateShiftsCli.ts",
     "start": "tsx src/server.ts",
     "start:prod": "SERVE_FRONTEND=true tsx src/server.ts",
+    "render:build": "cd .. && npm install --include=dev && npm run build && rm -rf backend/dist && cp -R dist backend/",
+    "render:start": "npm run start:prod",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
