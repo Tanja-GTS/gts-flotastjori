@@ -1,5 +1,3 @@
-      - key: SERVE_FRONTEND
-        value: "true"
 services:
   - type: web
     serviceRoot: backend
@@ -18,6 +16,10 @@ services:
     healthCheckPath: /health
 
     envVars:
+      # Serve the built frontend from the same service
+      - key: SERVE_FRONTEND
+        value: "true"
+
       # Required in production (single-origin hosting)
       - key: APP_ORIGIN
         value: https://gts-flotastjori.onrender.com
