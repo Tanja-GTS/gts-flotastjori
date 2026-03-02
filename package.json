@@ -22,7 +22,7 @@
     "backend:typecheck": "npm --prefix backend run typecheck",
     "backend:health": "curl -sSf http://localhost:4000/api/health",
     "prod:build": "npm run build",
-    "prod:start": "npm run backend:install && npm run prod:build && npm --prefix backend run start:prod"
+    "prod:start": "npm run backend:install && npm run prod:build && rm -rf backend/dist && cp -R dist backend/ && npm --prefix backend run start:prod"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.2.0",
