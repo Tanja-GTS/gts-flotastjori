@@ -67,6 +67,7 @@ export type DriverDto = {
   id: string;
   name: string;
   email?: string;
+  phone?: string;
 };
 
 function pickEmail(fields: Record<string, unknown>): string {
@@ -93,6 +94,60 @@ function pickEmail(fields: Record<string, unknown>): string {
   for (const v of Object.values(fields)) {
     const s = asString(v).trim();
     if (s.includes('@') && s.includes('.')) return s;
+  }
+
+  return '';
+}
+
+function looksLikePhone(raw: string): boolean {
+  const s = String(raw || '').trim();
+  if (!s) return false;
+  if (s.includes('@')) return false;
+
+  // Keep leading +, drop common separators.
+  const normalized = s
+    .replace(/\s+/g, '')
+    .replace(/[()\-._]/g, '')
+    .replace(/^00/, '+');
+
+  const m = normalized.match(/^\+?[0-9]{6,15}$/);
+  return Boolean(m);
+}
+
+function pickPhone(fields: Record<string, unknown>): string {
+  const candidates = [
+    'Phone',
+    'phone',
+    'PhoneNumber',
+    'phoneNumber',
+    'Telephone',
+    'telephone',
+    'Tel',
+    'tel',
+    'Mobile',
+    'mobile',
+    'MobileNumber',
+    'mobileNumber',
+    'Cell',
+    'cell',
+    'CellPhone',
+    'cellPhone',
+    'DriverPhone',
+    'driverPhone',
+    'DriverMobile',
+    'driverMobile',
+  ];
+
+  for (const k of candidates) {
+    const v = fields[k];
+    const s = asString(v).trim();
+    if (looksLikePhone(s)) return s;
+  }
+
+  // Fallback: scan values for something that looks like a phone number.
+  for (const v of Object.values(fields)) {
+    const s = asString(v).trim();
+    if (looksLikePhone(s)) return s;
   }
 
   return '';
@@ -134,11 +189,13 @@ export async function listDrivers(): Promise<DriverDto[]> {
         '';
 
       const email = pickEmail(fields);
+      const phone = pickPhone(fields);
 
       return {
         id: String(item.id || '').trim(),
         name: name.trim() || String(item.id || '').trim(),
         email: email || undefined,
+        phone: phone || undefined,
       };
     })
     .filter((d) => d.id && d.name);

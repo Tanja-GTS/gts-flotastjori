@@ -4,15 +4,15 @@ import { createElement } from 'react';
 import { IconChevronDown } from '@tabler/icons-react';
 
 export const theme = createTheme({
-  fontFamily: "'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+  fontFamily: "'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   primaryColor: 'brand',
   primaryShade: { light: 6, dark: 6 },
   radius: {
-    xs: '4px',
-    sm: '6px',
-    md: '8px',
-    lg: '12px',
-    xl: '16px',
+    xs: '2px',
+    sm: '4px',
+    md: '4px',
+    lg: '4px',
+    xl: '4px',
   },
   defaultRadius: 'sm',
 
@@ -39,7 +39,7 @@ export const theme = createTheme({
       defaultProps: { radius: 'sm' },
       vars: (_theme: unknown, _props: ButtonProps) => ({
         root: {
-          '--button-radius': '6px',
+          '--button-radius': '4px',
         },
       }),
     },

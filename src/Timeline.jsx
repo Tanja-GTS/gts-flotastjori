@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover } from '@mantine/core';
+import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip, Modal } from '@mantine/core';
 import { IconAlertCircle, IconChevronDown, IconChevronUp, IconChevronLeft, IconChevronRight, IconPrinter } from '@tabler/icons-react';
-import { addDays, format } from 'date-fns';
+import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import './timeline.css';
 import { selectRoutesForWorkspace, selectVisibleShifts } from './domain/selectors';
 import { SHIFT_TYPES_ORDERED, SHIFT_TYPE_LABELS, isShiftType } from './domain/shiftTypes';
@@ -79,6 +79,7 @@ export default function Timeline({
   const [isAssigning, setIsAssigning] = useState(false);
   const [assigningMode, setAssigningMode] = useState(null);
   const [assignError, setAssignError] = useState('');
+  const [assignReviewOpened, setAssignReviewOpened] = useState(false);
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [viewDays, setViewDays] = useState(7);
   const [showNotes, setShowNotes] = useState(false);
@@ -108,29 +109,166 @@ export default function Timeline({
   const [viewOpened, setViewOpened] = useState(false);
 
   useEffect(() => {
+    // Default workflow: selecting a shift applies to the whole week (same route + shift type).
+    // Managers can opt into single-shift assignment via the checkbox.
     if (selectedShiftToken) setAssignOnlyThisShift(false);
   }, [selectedShiftToken]);
 
   const visibleShifts = selectVisibleShifts(shifts, workspaceId, routes);
 
-  const getShiftCardTitle = useCallback(
-    (shift) => {
-      const routeName = String(shift?.routeName || '').trim();
-      const route = String(shift?.route || '').trim();
-      if (routeName) return routeName;
-      return route;
-    },
-    []
+  const getShiftCardTitle = useCallback((shift, rowShiftType) => {
+    const route = String(shift?.route || '').trim();
+    const typeLabel = SHIFT_TYPE_LABELS[rowShiftType] || '';
+    return [route, typeLabel].filter(Boolean).join(' ').trim();
+  }, []);
+
+  const unassignOption = useMemo(
+    () => ({
+      value: 'unassigned',
+      label: t('common.unassigned'),
+      name: t('common.unassigned'),
+      email: '',
+      phone: '',
+    }),
+    [t]
   );
+
+  const driverSelectOptions = useMemo(() => {
+    // Some workspaces have a placeholder Drivers-list entry like "🤷🏻‍♂️ Unassigned".
+    // We hide that and instead offer a real unassign action via value "unassigned".
+    const real = (driverOptions || []).filter(
+      (o) => !/unassigned/i.test(String(o?.name || o?.label || ''))
+    );
+    return [unassignOption, ...real];
+  }, [driverOptions, unassignOption]);
+
+  const getEditedDriverIdForShift = useCallback((shift) => {
+    const status = String(shift?.confirmationStatus || '').trim().toLowerCase();
+    const driverLabel = String(shift?.driver || '').trim();
+    const looksUnassigned = status === 'unassigned' || /unassigned/i.test(driverLabel);
+    if (looksUnassigned) return 'unassigned';
+    return shift?.driverId ? String(shift.driverId) : null;
+  }, []);
 
   const driverById = useMemo(() => {
     const m = new Map();
-    (driverOptions || []).forEach((o) => {
+    (driverSelectOptions || []).forEach((o) => {
       if (!o?.value) return;
       m.set(String(o.value), o);
     });
     return m;
-  }, [driverOptions]);
+  }, [driverSelectOptions]);
+
+  const runAssignment = useCallback(
+    async ({ withEmail }) => {
+      if (!selectedShiftToken || !editedDriverId) return;
+
+      const isUnassign = String(editedDriverId || '').trim() === 'unassigned';
+      if (withEmail && isUnassign) {
+        const msg = 'Cannot send a request when unassigning.';
+        setAssignError(msg);
+        notifications.show({ title: 'Cannot send request', message: msg, color: 'yellow' });
+        return;
+      }
+
+      const mode = withEmail ? 'request' : 'assign';
+      setAssigningMode(mode);
+      setIsAssigning(true);
+      setAssignError('');
+
+      try {
+        const result = withEmail
+          ? assignOnlyThisShift
+            ? await assignDriverAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId })
+            : await assignWeekAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId })
+          : assignOnlyThisShift
+            ? await assignDriverOnly({ shiftId: selectedShiftToken, driverId: editedDriverId })
+            : await assignWeekOnly({ shiftId: selectedShiftToken, driverId: editedDriverId });
+
+        const opt = driverById.get(String(editedDriverId));
+        const displayName = isUnassign
+          ? 'Unassigned'
+          : opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || 'Unassigned';
+
+        const updatedIds = Array.isArray(result?.updatedIds) ? result.updatedIds : [selectedShiftToken];
+        const updatedCount = updatedIds.length;
+
+        if (isUnassign) {
+          notifications.show({
+            title: 'Unassigned',
+            message: updatedCount > 1 ? `Unassigned ${updatedCount} shifts.` : 'Shift unassigned.',
+            color: 'gray',
+          });
+        } else if (!withEmail) {
+          notifications.show({
+            title: 'Assigned',
+            message: updatedCount > 1 ? `Assigned ${updatedCount} shifts.` : `Assigned ${displayName}.`,
+            color: 'blue',
+          });
+        } else {
+          const mailOk = result?.mailOk !== false;
+          const mailedTo = result?.mailedTo || opt?.email || '';
+          const mailError = typeof result?.mailError === 'string' ? result.mailError : '';
+
+          if (mailOk) {
+            notifications.show({
+              title: 'Request sent',
+              message: mailedTo ? `Sent to ${mailedTo}` : `Sent to ${displayName}`,
+              color: 'blue',
+            });
+          } else {
+            notifications.show({
+              title: 'Assigned (request not sent)',
+              message: mailError || 'The shift was assigned, but email sending is not configured.',
+              color: 'yellow',
+            });
+          }
+
+          if (updatedCount > 1) {
+            notifications.show({
+              title: 'Assigned group',
+              message: `Updated ${updatedCount} shifts (weekdays/weekend group).`,
+              color: 'blue',
+            });
+          }
+        }
+
+        const updated = new Set(updatedIds);
+        setShifts((prev) =>
+          prev.map((s) =>
+            updated.has(s.token)
+              ? {
+                  ...s,
+                  driverId: isUnassign ? null : String(editedDriverId),
+                  driver: isUnassign ? 'Unassigned' : displayName,
+                  confirmationStatus: isUnassign ? 'unassigned' : withEmail ? 'pending' : 'assigned',
+                }
+              : s
+          )
+        );
+
+        setAssignReviewOpened(false);
+        setSelectedShiftToken(null);
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message
+            : withEmail
+              ? 'Failed to send request'
+              : 'Failed to assign driver';
+        setAssignError(msg);
+        notifications.show({
+          title: withEmail ? 'Failed to send request' : 'Failed to assign',
+          message: msg,
+          color: 'red',
+        });
+      } finally {
+        setIsAssigning(false);
+        setAssigningMode(null);
+      }
+    },
+    [assignOnlyThisShift, editedDriverId, driverById, selectedShiftToken, setShifts]
+  );
 
   const normalizeShiftType = useCallback((shift) => {
     const raw = String(shift?.shiftType || '').trim();
@@ -431,6 +569,19 @@ export default function Timeline({
   const dayDates = Array.from({ length: viewDays }).map((_, i) =>
     addDays(currentWeekStart, i)
   );
+
+  const timelineGridColumns = useMemo(() => {
+    const labelColWidthPx = 90;
+
+    // 1 week: fit all days on screen (Mon–Sun), no horizontal scroll.
+    // 2 weeks: prefer readability via horizontal scroll (fixed column widths).
+    if (viewDays <= 7) {
+      return `${labelColWidthPx}px repeat(${viewDays}, minmax(0, 1fr))`;
+    }
+
+    const dayColWidthPx = 180;
+    return `${labelColWidthPx}px repeat(${viewDays}, ${dayColWidthPx}px)`;
+  }, [viewDays]);
 
   const todayISO = format(new Date(), 'yyyy-MM-dd');
 
@@ -798,70 +949,90 @@ export default function Timeline({
         {isLoading && (
           <div style={{ padding: 12, fontSize: 13, color: '#666' }}>{t('timeline.loadingShifts')}</div>
         )}
-        <div
-  className="timeline"
-  style={{
-    gridTemplateColumns: `90px repeat(${viewDays}, 1fr)`
-  }}
->
-          {/* top-left corner */}
-          <div className="corner">
-            <Button
-              size="xs"
-              disabled={selectedDates.length === 0}
-              onClick={() => {
-                const datesParam = selectedDates
-                  // Use local calendar date (avoid UTC shift from toISOString)
-                  .map((d) => format(d, 'yyyy-MM-dd'))
-                  .join(',');
-
-                setSelectedDates([]);
-                navigate(`/print-day?dates=${datesParam}`);
-              }}
-              aria-label={t('common.print')}
-              style={{ whiteSpace: 'normal', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+        <div className="timelineWrap">
+          {/* Sticky header row (top-left corner + day headers) */}
+          <div
+            className={`timeline timelineHeader${viewDays > 7 ? ' is-wide' : ''}`}
+            style={{
+              gridTemplateColumns: timelineGridColumns,
+            }}
+          >
+            {/* top-left corner */}
+            <div className="corner">
+            <Tooltip
+              label={selectedDates.length === 0 ? t('timeline.selectDaysToPrint') : t('timeline.printSelectedDays')}
+              withArrow
+              position="bottom"
+              openDelay={250}
             >
-              <IconPrinter size={16} />
-              <span>{t('common.print')}</span>
-            </Button>
-          </div>
+              <span style={{ display: 'inline-flex' }}>
+                <Button
+                  size="xs"
+                  disabled={selectedDates.length === 0}
+                  onClick={() => {
+                    const datesParam = selectedDates
+                      // Use local calendar date (avoid UTC shift from toISOString)
+                      .map((d) => format(d, 'yyyy-MM-dd'))
+                      .join(',');
 
-          {/* day headers */}
-          {daysWithNames.map(({ date, name }, i) => {
-            const dateStr = `${date.getDate()} ${date.toLocaleDateString(locale, { month: 'short' })}`;
-            const isToday = format(date, 'yyyy-MM-dd') === todayISO;
-            const isSelected =
-              selectedDates.length === 0 ||
-              selectedDateKeys.has(date.toDateString());
-            return (
-              <div
-                key={`${name}-${i}`}
-                className={`day-header${isToday ? ' today-col' : ''}`}
-                style={{
-                  opacity: isSelected ? 1 : 0.4,
-                  transition: 'opacity 120ms ease'
-                }}
-              >
-                <div className="dayHeaderContent">
-                  <input
-                    className="dayHeaderCheckbox"
-                    type="checkbox"
-                    checked={selectedDateKeys.has(date.toDateString())}
-                    onChange={() => toggleDateSelection(date)}
-                    aria-label={`Select ${name} ${dateStr}`}
-                  />
-                  <div className="dayHeaderText">
-                    <div className="dayHeaderDow">{name}</div>
-                    <div className="dayHeaderDate">{dateStr}</div>
+                    setSelectedDates([]);
+                    navigate(`/print-day?dates=${datesParam}`);
+                  }}
+                  aria-label={t('common.print')}
+                  style={{ whiteSpace: 'normal', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <IconPrinter size={16} />
+                  <span>{t('common.print')}</span>
+                </Button>
+              </span>
+            </Tooltip>
+            </div>
+
+            {/* day headers */}
+            {daysWithNames.map(({ date, name }, i) => {
+              const dateStr = `${date.getDate()} ${date.toLocaleDateString(locale, { month: 'short' })}`;
+              const isToday = format(date, 'yyyy-MM-dd') === todayISO;
+              const isSelected =
+                selectedDates.length === 0 ||
+                selectedDateKeys.has(date.toDateString());
+              return (
+                <div
+                  key={`${name}-${i}`}
+                  className={`day-header${isToday ? ' today-col' : ''}`}
+                  style={{
+                    opacity: isSelected ? 1 : 0.4,
+                    transition: 'opacity 120ms ease',
+                  }}
+                >
+                  <div className="dayHeaderContent">
+                    <input
+                      className="dayHeaderCheckbox"
+                      type="checkbox"
+                      checked={selectedDateKeys.has(date.toDateString())}
+                      onChange={() => toggleDateSelection(date)}
+                      aria-label={`Select ${name} ${dateStr}`}
+                    />
+                    <div className="dayHeaderText">
+                      <div className="dayHeaderDow">{name}</div>
+                      <div className="dayHeaderDate">{dateStr}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
 
-          {/* Route × ShiftType rows */}
-          {rows.map(({ route, shiftType }) => (
-            <React.Fragment key={`${route}-${shiftType}`}>
+          {/* Body grid (row labels + cells) */}
+          <div
+            className={`timeline timelineBody${viewDays > 7 ? ' is-wide' : ''}`}
+            style={{
+              gridTemplateColumns: timelineGridColumns,
+            }}
+          >
+
+            {/* Route × ShiftType rows */}
+            {rows.map(({ route, shiftType }) => (
+              <React.Fragment key={`${route}-${shiftType}`}>
               {/* row label */}
               {(() => {
                 const rowKey = `${route}__${shiftType}`;
@@ -893,7 +1064,6 @@ export default function Timeline({
                 const rowKey = `${route}__${shiftType}`;
                 const rowSelected = selectedRowKey === rowKey;
                 const cellDate = format(date, 'yyyy-MM-dd');
-                const isToday = cellDate === todayISO;
                 const bucketKey = `${route}__${shiftType}__${cellDate}`;
                 const dayShifts = shiftBuckets.get(bucketKey) || [];
                 const isSelected =
@@ -903,7 +1073,7 @@ export default function Timeline({
                 return (
                   <div
                     key={`${route}-${date.toISOString()}`}
-                    className={`cell${isToday ? ' today-col' : ''}${rowSelected ? ' row-selected' : ''}`}
+                    className={`cell${rowSelected ? ' row-selected' : ''}${dayShifts.length === 1 ? ' cell--single' : ''}`}
                     style={{
                       opacity: isSelected ? 1 : 0.35,
                       transition: 'opacity 120ms ease'
@@ -914,10 +1084,27 @@ export default function Timeline({
                     )}
                     {dayShifts.map((shift, i) => (
                       (() => {
-                        const cardTitle = getShiftCardTitle(shift);
+                        const cardTitle = getShiftCardTitle(shift, shiftType);
                         const shiftTypeLabel = SHIFT_TYPE_LABELS[shiftType] || String(shiftType || '');
                         const driverLabel = shift.driver === 'Unassigned' ? t('common.unassignedUpper') : shift.driver;
                         const ariaTitle = cardTitle ? ` — ${cardTitle}` : '';
+
+                        const rawStatus = String(shift.confirmationStatus || '').trim().toLowerCase();
+                        const normalizedStatus = rawStatus === 'accepted' ? 'assigned' : rawStatus;
+                        const effectiveStatus = normalizedStatus || (shift.driver === 'Unassigned' ? 'unassigned' : '');
+                        const statusLabel =
+                          effectiveStatus === 'pending'
+                            ? 'Pending'
+                            : effectiveStatus === 'assigned'
+                              ? 'Assigned'
+                              : effectiveStatus === 'unassigned'
+                                ? t('common.unassigned')
+                                : effectiveStatus
+                                  ? effectiveStatus
+                                  : '';
+
+                        const driverText = shift.driver && shift.driver !== 'Unassigned' ? shift.driver : '';
+
                         return (
                       <div
                         key={shift.token || `${shift.route}-${shift.day}-${shift.name}-${i}`}
@@ -926,8 +1113,9 @@ export default function Timeline({
                         tabIndex={0}
                         aria-label={`${shiftTypeLabel} shift${ariaTitle} from ${shift.time} for ${driverLabel}`}
                         onClick={() => {
-                          setEditedDriverId(shift.driverId || null);
+                          setEditedDriverId(getEditedDriverIdForShift(shift));
                           setAssignError('');
+                          setAssignOnlyThisShift(false);
                           setEditedNote(shift.note || '');
                           setIsEditingNote(false);
                           setShowNotes(false);
@@ -937,8 +1125,9 @@ export default function Timeline({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            setEditedDriverId(shift.driverId || null);
+                            setEditedDriverId(getEditedDriverIdForShift(shift));
                             setAssignError('');
+                            setAssignOnlyThisShift(false);
                             setEditedNote(shift.note || '');
                             setIsEditingNote(false);
                             setShowNotes(false);
@@ -948,19 +1137,22 @@ export default function Timeline({
                         }}
                       >
                         {cardTitle && (
-                          <div className="shift-name" style={{ color: '#1a1a1a', fontWeight: 700 }}>{cardTitle}</div>
-                        )}
-                        <div className="shift-time" style={{ color: '#222' }}>{shift.time}</div>
-                        <div className="shift-driver" style={{ color: shift.driver === 'Unassigned' ? '#b00020' : '#1a1a1a', fontWeight: 500 }}>
-                          {shift.driver === 'Unassigned' ? t('common.unassignedUpper') : shift.driver}
-                        </div>
-                        {shift.confirmationStatus !== 'unassigned' && (
-                          <div className="shift-status" style={{ color: shift.confirmationStatus === 'pending' ? '#b36a00' : shift.confirmationStatus === 'assigned' ? '#1971c2' : '#b00020', fontWeight: 600 }}>
-                            {shift.confirmationStatus === 'pending' && 'Pending'}
-                            {shift.confirmationStatus === 'assigned' && 'Assigned'}
-                            {shift.confirmationStatus === 'declined' && 'Declined'}
+                          <div className="shift-name" title={String(shift.routeName || '').trim() || undefined}>
+                            {cardTitle}
                           </div>
                         )}
+                        <div className="shift-time">{shift.time}</div>
+
+                        <div className="shift-footer">
+                          <div className="shift-driver">{driverText}</div>
+                          {statusLabel ? (
+                            <div
+                              className={`shift-status${effectiveStatus ? ` shift-status--${effectiveStatus}` : ''}`}
+                            >
+                              {statusLabel}
+                            </div>
+                          ) : null}
+                        </div>
 
                       </div>
                         );
@@ -969,8 +1161,9 @@ export default function Timeline({
                   </div>
                 );
               })}
-            </React.Fragment>
-          ))}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1099,32 +1292,50 @@ export default function Timeline({
               <p><strong>Shift type:</strong> {SHIFT_TYPE_LABELS[selectedShift.shiftType] || selectedShift.shiftType}</p>
               <p><strong>Time:</strong> {selectedShift.time}</p>
 
-              <details style={{ marginTop: 8, marginBottom: 8 }}>
-                <summary style={{ cursor: 'pointer', color: '#666', fontSize: 13 }}>
-                  IDs (for fixing data in Lists)
-                </summary>
-                <div style={{ marginTop: 6, fontSize: 12, color: '#444', lineHeight: 1.4 }}>
-                  <div><strong>Shift instance ID:</strong> {selectedShift.id || '—'}</div>
-                  <div><strong>Shift pattern ID:</strong> {selectedShift.patternId || '—'}</div>
-                  <div><strong>Shift template ID:</strong> {selectedShift.templateId || '—'}</div>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: '#666', lineHeight: 1.35 }}>
-                  <div>Pattern ID = row in ShiftPatterns (controls type/time/days).</div>
-                  <div>Instance ID = row in ShiftInstances (what appears on the calendar/print).</div>
-                </div>
-              </details>
+              {(() => {
+                const driverLabel = String(selectedShift.driver || '').trim();
+                const isUnassigned =
+                  selectedShift.confirmationStatus === 'unassigned' || /unassigned/i.test(driverLabel);
 
-              <p>
-                <strong>Driver:</strong>{' '}
-                {selectedShift.driver === 'Unassigned' ? (
-                  <>
-                    <IconAlertCircle size={16} color="#868e96" />
-                    <span style={{ marginLeft: 6 }}>{t('common.unassigned')}</span>
-                  </>
-                ) : (
-                  selectedShift.driver
-                )}
-              </p>
+                const driverIdKey = selectedShift.driverId ? String(selectedShift.driverId).trim() : '';
+                const byId = driverIdKey ? driverById.get(driverIdKey) : null;
+                const byName =
+                  !byId && selectedShift.driver
+                    ? (driverOptions || []).find(
+                        (o) => String(o?.name || o?.label || '').trim().toLowerCase() ===
+                          String(selectedShift.driver || '').trim().toLowerCase()
+                      )
+                    : null;
+                const driverOpt = byId || byName;
+                const phone = String(driverOpt?.phone || '').trim();
+
+                return (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <strong>Driver:</strong>
+                      {isUnassigned ? (
+                        <>
+                          <IconAlertCircle size={16} color="#868e96" />
+                          <span>{t('common.unassigned')}</span>
+                        </>
+                      ) : (
+                        <span>{selectedShift.driver}</span>
+                      )}
+                    </div>
+                    {!isUnassigned ? (
+                      phone ? (
+                        <div style={{ marginTop: 4, fontSize: 13, color: '#444' }}>{phone}</div>
+                      ) : (
+                        <div style={{ marginTop: 4, fontSize: 13, color: '#868e96' }}>
+                          {driverOpt
+                            ? 'No phone number in Drivers list.'
+                            : 'Driver not found in Drivers list (no phone available).'}
+                        </div>
+                      )
+                    ) : null}
+                  </div>
+                );
+              })()}
 
 <div style={{ marginBottom: 12 }}>
   <strong style={{ fontSize: 13 }}>Buses used</strong>
@@ -1144,7 +1355,7 @@ export default function Timeline({
               <div style={{ marginBottom: 12 }}>
                 <Select
                   aria-label="Assign driver"
-                  data={driverOptions.length ? driverOptions : fallbackDrivers}
+                  data={driverSelectOptions.length ? driverSelectOptions : fallbackDrivers}
                   value={editedDriverId}
                   onChange={setEditedDriverId}
                   placeholder="Assign driver"
@@ -1161,147 +1372,108 @@ export default function Timeline({
 
                 <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
                   <Button
-                    loading={isAssigning && assigningMode === 'assign'}
+                    loading={isAssigning}
                     disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
-                    onClick={async () => {
-                      if (!selectedShiftToken || !editedDriverId) return;
-
-                      setAssigningMode('assign');
-                      setIsAssigning(true);
-                      setAssignError('');
-                      try {
-                        const result = assignOnlyThisShift
-                          ? await assignDriverOnly({ shiftId: selectedShiftToken, driverId: editedDriverId })
-                          : await assignWeekOnly({ shiftId: selectedShiftToken, driverId: editedDriverId });
-
-                        const opt = driverById.get(String(editedDriverId));
-                        const displayName = opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || 'Unassigned';
-
-                        const updatedIds = Array.isArray(result?.updatedIds) ? result.updatedIds : [selectedShiftToken];
-                        const updatedCount = updatedIds.length;
-
-                        notifications.show({
-                          title: 'Assigned',
-                          message: updatedCount > 1 ? `Assigned ${updatedCount} shifts.` : `Assigned ${displayName}.`,
-                          color: 'blue',
-                        });
-
-                        const updated = new Set(updatedIds);
-                        setShifts((prev) =>
-                          prev.map((s) =>
-                            updated.has(s.token)
-                              ? {
-                                  ...s,
-                                  driverId: String(editedDriverId),
-                                  driver: displayName,
-                                  confirmationStatus: 'assigned',
-                                }
-                              : s
-                          )
-                        );
-
-                        setSelectedShiftToken(null);
-                      } catch (e) {
-                        const msg = e instanceof Error ? e.message : 'Failed to assign driver';
-                        setAssignError(msg);
-                        notifications.show({
-                          title: 'Failed to assign',
-                          message: msg,
-                          color: 'red',
-                        });
-                      } finally {
-                        setIsAssigning(false);
-                        setAssigningMode(null);
-                      }
-                    }}
+                    onClick={() => setAssignReviewOpened(true)}
                   >
-                    Assign
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    loading={isAssigning && assigningMode === 'request'}
-                    disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
-                    onClick={async () => {
-                      if (!selectedShiftToken || !editedDriverId) return;
-
-                      setAssigningMode('request');
-                      setIsAssigning(true);
-                      setAssignError('');
-                      try {
-                        const result = assignOnlyThisShift
-                          ? await assignDriverAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId })
-                          : await assignWeekAndEmail({ shiftId: selectedShiftToken, driverId: editedDriverId });
-
-                        const opt = driverById.get(String(editedDriverId));
-                        const displayName = opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || 'Unassigned';
-
-                        const mailOk = result?.mailOk !== false;
-                        const mailedTo = result?.mailedTo || opt?.email || '';
-                        const mailError = typeof result?.mailError === 'string' ? result.mailError : '';
-
-                        const updatedIds = Array.isArray(result?.updatedIds) ? result.updatedIds : [selectedShiftToken];
-                        const updatedCount = updatedIds.length;
-
-                        if (mailOk) {
-                          notifications.show({
-                            title: 'Request sent',
-                            message: mailedTo ? `Sent to ${mailedTo}` : `Sent to ${displayName}`,
-                            color: 'blue',
-                          });
-                        } else {
-                          notifications.show({
-                            title: 'Assigned (request not sent)',
-                            message: mailError || 'The shift was assigned, but email sending is not configured.',
-                            color: 'yellow',
-                          });
-                        }
-
-                        if (updatedCount > 1) {
-                          notifications.show({
-                            title: 'Assigned group',
-                            message: `Updated ${updatedCount} shifts (weekdays/weekend group).`,
-                            color: 'blue',
-                          });
-                        }
-
-                        const updated = new Set(updatedIds);
-                        setShifts((prev) =>
-                          prev.map((s) =>
-                            updated.has(s.token)
-                              ? {
-                                  ...s,
-                                  driverId: String(editedDriverId),
-                                  driver: displayName,
-                                  confirmationStatus: 'pending',
-                                }
-                              : s
-                          )
-                        );
-
-                        setSelectedShiftToken(null);
-                      } catch (e) {
-                        const msg = e instanceof Error ? e.message : 'Failed to send request';
-                        setAssignError(msg);
-                        notifications.show({
-                          title: 'Failed to send request',
-                          message: msg,
-                          color: 'red',
-                        });
-                      } finally {
-                        setIsAssigning(false);
-                        setAssigningMode(null);
-                      }
-                    }}
-                  >
-                    Send a request
+                    Assign…
                   </Button>
                 </div>
 
+                <Modal
+                  opened={assignReviewOpened}
+                  onClose={() => setAssignReviewOpened(false)}
+                  title="Review assignment"
+                  centered
+                >
+                  {(() => {
+                    const isUnassign = String(editedDriverId || '').trim() === 'unassigned';
+                    const opt = editedDriverId ? driverById.get(String(editedDriverId)) : null;
+                    const displayName =
+                      isUnassign
+                        ? t('common.unassigned')
+                        : opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || '';
+
+                    const shiftRoute = String(selectedShift?.route || '').trim();
+                    const normalizedType = selectedShift ? normalizeShiftType(selectedShift) : '';
+                    const shiftTypeLabel = normalizedType
+                      ? SHIFT_TYPE_LABELS[normalizedType] || normalizedType
+                      : String(selectedShift?.shiftType || '').trim();
+                    const shiftTime = String(selectedShift?.time || '').trim();
+
+                    const iso = String(selectedShift?.date || '').slice(0, 10);
+                    const selectedDate = iso ? parseISO(iso) : null;
+
+                    const day2 = (d) => d.toLocaleDateString(locale, { day: '2-digit' });
+                    const monthLong = (d) => d.toLocaleDateString(locale, { month: 'long' });
+                    const dowShort = (d) => d.toLocaleDateString(locale, { weekday: 'short' });
+
+                    const formatRangeHuman = (start, end) => {
+                      const sameMonth =
+                        start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+                      const datePart = sameMonth
+                        ? `${day2(start)}–${day2(end)} ${monthLong(end)}`
+                        : `${day2(start)} ${monthLong(start)} – ${day2(end)} ${monthLong(end)}`;
+                      return `${datePart} (${dowShort(start)}–${dowShort(end)})`;
+                    };
+
+                    let scopeText = assignOnlyThisShift ? 'This shift only' : 'Whole week';
+                    if (selectedDate && !Number.isNaN(selectedDate.getTime())) {
+                      if (assignOnlyThisShift) {
+                        scopeText = `${day2(selectedDate)} ${monthLong(selectedDate)} (${dowShort(selectedDate)})`;
+                      } else {
+                        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+                        const dow = selectedDate.getDay();
+                        const isWeekend = dow === 0 || dow === 6;
+                        const rangeStart = isWeekend ? addDays(weekStart, 5) : weekStart;
+                        const rangeEnd = isWeekend ? addDays(weekStart, 6) : addDays(weekStart, 4);
+                        scopeText = formatRangeHuman(rangeStart, rangeEnd);
+                      }
+                    }
+
+                    const shiftLabel = [shiftRoute, shiftTypeLabel].filter(Boolean).join(' ').trim();
+
+                    return (
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        <div style={{ fontSize: 13, color: '#33363E', lineHeight: 1.35 }}>
+                          <div>
+                            <strong>Driver:</strong> {displayName || '—'}
+                          </div>
+                          <div>
+                            <strong>Shift:</strong> {shiftLabel || '—'}
+                            {shiftTime ? `; ${shiftTime}` : ''}
+                          </div>
+                          <div>
+                            <strong>Scope:</strong> {scopeText}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                          <Button
+                            variant="outline"
+                            loading={isAssigning && assigningMode === 'request'}
+                            disabled={isAssigning || isUnassign}
+                            onClick={() => runAssignment({ withEmail: true })}
+                          >
+                            Send request
+                          </Button>
+                          <Button
+                            loading={isAssigning && assigningMode === 'assign'}
+                            disabled={isAssigning}
+                            onClick={() => runAssignment({ withEmail: false })}
+                          >
+                            {isUnassign ? 'Unassign' : 'Assign now'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </Modal>
+
                 <div style={{ marginTop: 12, fontSize: 12, color: '#33363E' }}>
-                  By default, the shift type is applied to the whole week.
+                  Default is to assign the driver for the whole week (same route + shift type).
                   <br />
-                  Tick the checkbox if you want to assign a driver to a specific shift instead.
+                  Tick the checkbox if you only want to assign this specific shift.
                 </div>
 
                 {selectedShift?.manual && (

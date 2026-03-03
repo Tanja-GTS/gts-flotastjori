@@ -134,9 +134,10 @@ export async function postAssignWeek(req: Request, res: Response) {
   try {
     const anchorItemId = String(req.params.id || '').trim();
     const driverId = asString((req.body as any)?.driverId).trim();
+    const isUnassign = !driverId || driverId === 'unassigned';
 
-    if (!anchorItemId || !driverId) {
-      res.status(400).json({ ok: false, error: 'Required: :id and body.driverId' });
+    if (!anchorItemId) {
+      res.status(400).json({ ok: false, error: 'Required: :id' });
       return;
     }
 
@@ -151,9 +152,9 @@ export async function postAssignWeek(req: Request, res: Response) {
       items: weekInfo.shifts,
       concurrency,
       worker: async (s) => {
-        await assignDriverToShiftInstance({ itemId: s.id, driverId });
+        await assignDriverToShiftInstance({ itemId: s.id, driverId: isUnassign ? null : driverId });
         try {
-          await setShiftInstanceConfirmationStatus({ itemId: s.id, status: 'assigned' });
+          await setShiftInstanceConfirmationStatus({ itemId: s.id, status: isUnassign ? 'unassigned' : 'assigned' });
         } catch {
           // ignore
         }
@@ -287,9 +288,10 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
   try {
     const anchorItemId = String(req.params.id || '').trim();
     const driverId = asString((req.body as any)?.driverId).trim();
+    const isUnassign = !driverId || driverId === 'unassigned';
 
-    if (!anchorItemId || !driverId) {
-      res.status(400).json({ ok: false, error: 'Required: :id and body.driverId' });
+    if (!anchorItemId) {
+      res.status(400).json({ ok: false, error: 'Required: :id' });
       return;
     }
 
@@ -304,9 +306,9 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
       items: weekInfo.shifts,
       concurrency,
       worker: async (s) => {
-        await assignDriverToShiftInstance({ itemId: s.id, driverId });
+        await assignDriverToShiftInstance({ itemId: s.id, driverId: isUnassign ? null : driverId });
         try {
-          await setShiftInstanceConfirmationStatus({ itemId: s.id, status: 'pending' });
+          await setShiftInstanceConfirmationStatus({ itemId: s.id, status: isUnassign ? 'unassigned' : 'pending' });
         } catch {
           // ignore
         }
@@ -314,6 +316,28 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
     });
 
     cacheInvalidatePrefix('shifts|');
+
+    if (isUnassign) {
+      const shift = {
+        ...weekInfo.anchor,
+        driverId: null,
+        driverName: undefined,
+        driverEmail: undefined,
+        confirmationStatus: 'unassigned',
+      };
+
+      res.json({
+        ok: true,
+        mailedTo: null,
+        mailOk: true,
+        mailError: null,
+        updatedIds: weekInfo.shifts.map((s) => s.id),
+        weekStart: weekInfo.weekStart,
+        weekEnd: weekInfo.weekEnd,
+        shift,
+      });
+      return;
+    }
 
     const selectedDriver = (await resolveDrivers({ driverIds: [driverId] })).get(driverId);
     const to = selectedDriver?.email || '';

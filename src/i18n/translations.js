@@ -29,6 +29,8 @@ export const translations = {
       noBusAssigned: 'No bus assigned',
       view1Week: '1 Week',
       view2Weeks: '2 Weeks',
+      printSelectedDays: 'Print selected days',
+      selectDaysToPrint: 'Select days to print',
     },
     printDay: {
       titleHint: 'Daily driving overview',

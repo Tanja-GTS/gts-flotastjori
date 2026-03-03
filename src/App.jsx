@@ -123,6 +123,7 @@ export default function App() {
 
   const [busOptions, setBusOptions] = useState([]);
   const [driverOptions, setDriverOptions] = useState([]);
+  const [didBackfillDriverPhones, setDidBackfillDriverPhones] = useState(false);
 
   useEffect(() => {
     if (!isGenerating || !generateStartedAtMs) return;
@@ -208,6 +209,7 @@ export default function App() {
             label: d.email ? `${d.name} (${d.email})` : d.name,
             name: d.name,
             email: d.email || '',
+            phone: d.phone || '',
           }))
           .filter((o) => o.value);
         setDriverOptions(opts);
@@ -219,6 +221,46 @@ export default function App() {
       cancelled = true;
     };
   }, [canCallApi]);
+
+  // If the app was already open before we added driver phone support,
+  // it may have cached driverOptions without `phone`. Refetch once to backfill.
+  useEffect(() => {
+    if (!canCallApi) return;
+    if (didBackfillDriverPhones) return;
+    if (!Array.isArray(driverOptions) || driverOptions.length === 0) return;
+
+    const hasAnyPhone = driverOptions.some((o) => typeof o?.phone === 'string' && o.phone.trim());
+    const hasPhoneKey = driverOptions.some((o) => Object.prototype.hasOwnProperty.call(o || {}, 'phone'));
+
+    if (hasAnyPhone || hasPhoneKey) {
+      setDidBackfillDriverPhones(true);
+      return;
+    }
+
+    let cancelled = false;
+    fetchDrivers()
+      .then((drivers) => {
+        if (cancelled) return;
+        const opts = (drivers || [])
+          .map((d) => ({
+            value: String(d.id),
+            label: d.email ? `${d.name} (${d.email})` : d.name,
+            name: d.name,
+            email: d.email || '',
+            phone: d.phone || '',
+          }))
+          .filter((o) => o.value);
+        setDriverOptions(opts);
+        setDidBackfillDriverPhones(true);
+      })
+      .catch(() => {
+        setDidBackfillDriverPhones(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canCallApi, didBackfillDriverPhones, driverOptions]);
 
   const monthsToFetch = useMemo(
     () => monthsInRange(visibleRange.start, visibleRange.end),
