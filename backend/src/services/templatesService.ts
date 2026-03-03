@@ -29,7 +29,11 @@ function asNumber(value: unknown): number | undefined {
 const cache = new Map<string, TemplateDefaults>();
 
 export async function getTemplateDefaults(templateId: string): Promise<TemplateDefaults> {
-  const templatesListId = optionalEnv('MS_TEMPLATES_LIST_ID', '').trim();
+  // Optional: some deployments don't have a dedicated Templates list.
+  // We also support the older/mismatched env var name used in some setups.
+  const templatesListId =
+    optionalEnv('MS_TEMPLATES_LIST_ID', '').trim() ||
+    optionalEnv('MS_SHIFT_TEMPLATES_LIST_ID', '').trim();
   if (!templatesListId) return {};
 
   const routeNameField = optionalEnv('TEMPLATE_FIELD_ROUTE_NAME', 'routeName').trim();

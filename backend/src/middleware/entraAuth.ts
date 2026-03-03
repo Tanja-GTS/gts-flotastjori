@@ -21,8 +21,8 @@ function misconfiguredAuth(message: string): RequestHandler {
 }
 
 function isEnabled(): boolean {
-  // FORCE: Always disable auth for staging
-  return false;
+  const raw = (process.env.AUTH_ENABLED || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
 }
 
 function readRequired(name: string): string {

@@ -53,6 +53,10 @@ export default function Timeline({
   generatingAvgMs = 0,
   generateResultSummary = '',
   loadError = '',
+  backendAuthEnabled = false,
+  authStatus = 'disabled',
+  authError = '',
+  onSignIn,
 }) {
   const navigate = useNavigate();
   const { lang, setLang, t, locale } = useI18n();
@@ -532,6 +536,17 @@ export default function Timeline({
           <div className="appHeader__right">
             <div className="appHeader__separator" aria-hidden="true" />
             <div className="appHeader__actions">
+              {backendAuthEnabled && authStatus !== 'signed-in' && typeof onSignIn === 'function' && (
+                <button
+                  className="appHeader__addShift"
+                  type="button"
+                  onClick={() => onSignIn().catch(() => {})}
+                  aria-label="Sign in"
+                  title={authError || 'Sign in to load and generate shifts'}
+                >
+                  Sign in
+                </button>
+              )}
               <button
                 className="appHeader__addShift"
                 type="button"

@@ -28,7 +28,9 @@ services:
 
       # Entra API auth (recommended)
       - key: AUTH_ENABLED
-        value: "true"
+        # Keep this off until Entra login is confirmed working end-to-end.
+        # When you want to require sign-in for /api/*, set this to "true".
+        value: "false"
 
       # Optional: temporarily allow unauthenticated /api/debug/* while troubleshooting
       - key: PUBLIC_DEBUG_ENDPOINTS
@@ -61,6 +63,11 @@ services:
       - key: MS_SHIFT_INSTANCES_LIST_ID
         sync: false
       - key: MS_SHIFT_PATTERNS_LIST_ID
+        sync: false
+
+      # Required if your Templates don't provide BusLookupId (ShiftInstances.busId is required)
+      # This should be the *lookup item ID* in your Buses list (often a small integer like "1").
+      - key: DEFAULT_BUS_LOOKUP_ID
         sync: false
 
       # ShiftInstances column internal-name overrides (Microsoft Lists often uses field_#)

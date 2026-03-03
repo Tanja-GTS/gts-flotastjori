@@ -525,7 +525,7 @@ export async function generateShiftInstances(params: {
       if (busLookupIdToWrite == null) {
         if (!Number.isFinite(defaultBusLookupId)) {
           throw new Error(
-            'ShiftInstances column busId is required. Set DEFAULT_BUS_LOOKUP_ID in backend/.env (or ensure the template has BusLookupId).'
+            'ShiftInstances column busId is required. Set the DEFAULT_BUS_LOOKUP_ID environment variable (e.g. in Render → Service → Environment), or ensure the template has BusLookupId.'
           );
         }
         busLookupIdToWrite = defaultBusLookupId;

@@ -7,7 +7,13 @@ import { WORKSPACES } from './workspaces';
 import PrintDay from './PrintDay';
 import { fetchBuses, fetchDrivers, fetchShifts, generateShifts } from './data/backendApi';
 import { useI18n } from './i18n';
-import { getSignedInAccount, isMsalConfigured, startLogin } from './auth/msal';
+
+function isMsalConfiguredFromEnv() {
+  const tenantId = (import.meta.env?.VITE_ENTRA_TENANT_ID || '').trim();
+  const clientId = (import.meta.env?.VITE_ENTRA_CLIENT_ID || '').trim();
+  const apiScope = (import.meta.env?.VITE_ENTRA_API_SCOPE || '').trim();
+  return Boolean(tenantId && clientId && apiScope);
+}
 
 const GENERATE_DURATIONS_KEY = 'fleetScheduler.generateDurationsMs';
 
@@ -64,11 +70,41 @@ function normalizeShift(apiShift) {
 export default function App() {
   const { t } = useI18n();
   // Enable authentication if MSAL is configured
-  const msalConfigured = isMsalConfigured();
+  const msalConfigured = isMsalConfiguredFromEnv();
   const [authStatus, setAuthStatus] = useState(msalConfigured ? 'checking' : 'disabled');
   const [authError, setAuthError] = useState('');
 
-  const canCallApi = !msalConfigured || authStatus === 'signed-in';
+  // Detect backend auth mode (public vs Entra-protected) so the UI behavior stays consistent.
+  // This prevents the common failure mode where VITE_ENTRA_* is set (so frontend expects login)
+  // but the backend is actually public (or vice-versa), making shifts/generate appear broken.
+  const [backendAuthEnabled, setBackendAuthEnabled] = useState(false);
+
+  const handleSignIn = useCallback(async () => {
+    const apiScope = (import.meta.env?.VITE_ENTRA_API_SCOPE || '').trim();
+    if (!apiScope) throw new Error('Missing VITE_ENTRA_API_SCOPE');
+    const { startLogin } = await import('./auth/msal');
+    await startLogin({ apiScope });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/health')
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        setBackendAuthEnabled(Boolean(j && j.authEnabled));
+      })
+      .catch(() => {
+        // If we can't reach /health (proxy mismatch, etc.), don't block the app.
+        if (cancelled) return;
+        setBackendAuthEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canCallApi = backendAuthEnabled ? authStatus === 'signed-in' : true;
 
   const [shifts, setShifts] = useState([]);
   const [workspaceId, setWorkspaceId] = useState(WORKSPACES[0].id);
@@ -111,7 +147,8 @@ export default function App() {
 
     setAuthStatus('checking');
     setAuthError('');
-    getSignedInAccount()
+    import('./auth/msal')
+      .then(({ getSignedInAccount }) => getSignedInAccount())
       .then((account) => {
         if (cancelled) return;
         if (account) setAuthStatus('signed-in');
@@ -206,6 +243,12 @@ export default function App() {
     if (!workspaceId) return;
     if (monthsToFetch.length === 0) return;
 
+    if (backendAuthEnabled && authStatus !== 'signed-in') {
+      setLoadError('Sign in required to load shifts.');
+      setShifts([]);
+      return;
+    }
+
     setIsLoadingShifts(true);
     setLoadError('');
     try {
@@ -226,7 +269,11 @@ export default function App() {
   const handleGenerate = useCallback(
     async ({ month }) => {
       if (!workspaceId || !month) return;
-      if (!canCallApi) return;
+
+      if (backendAuthEnabled && authStatus !== 'signed-in') {
+        setLoadError('Sign in required to generate shifts.');
+        return;
+      }
 
       const startedAt = Date.now();
       setGenerateStartedAtMs(startedAt);
@@ -264,7 +311,7 @@ export default function App() {
         setGenerateElapsedMs(0);
       }
     },
-    [workspaceId, t, canCallApi, loadShiftsForMonths]
+    [workspaceId, t, loadShiftsForMonths, backendAuthEnabled, authStatus]
   );
 
 
@@ -292,6 +339,10 @@ export default function App() {
               generatingAvgMs={generateAvgDurationMs}
               generateResultSummary={generateResultSummary}
               loadError={loadError}
+              authStatus={authStatus}
+              authError={authError}
+              backendAuthEnabled={backendAuthEnabled}
+              onSignIn={handleSignIn}
             />
           }
         />

@@ -141,6 +141,12 @@ Example:
 
 2) Add everything required from `backend/.env.example` (Graph + Lists IDs + mail sender)
 
+If Generate fails with an error like:
+
+- `ShiftInstances column busId is required... DEFAULT_BUS_LOOKUP_ID ...`
+
+…set `DEFAULT_BUS_LOOKUP_ID` in Render to a valid bus lookup item ID (from your **Buses** list). This is used as a fallback when a template doesn’t specify `BusLookupId`.
+
 If you see Graph errors like:
 
 - `A provided field name is not recognized`

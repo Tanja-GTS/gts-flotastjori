@@ -58,6 +58,11 @@ app.get('/health', (_req, res) => {
   const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
   const serveFrontend = serveFrontendEnv === 'true' || ((isRender || isProd) && serveFrontendEnv !== 'false');
 
+  const authEnabledRaw = String(process.env.AUTH_ENABLED || '').trim().toLowerCase();
+  const authEnabled = authEnabledRaw === '1' || authEnabledRaw === 'true' || authEnabledRaw === 'yes' || authEnabledRaw === 'on';
+
+  const defaultBusLookupId = String(process.env.DEFAULT_BUS_LOOKUP_ID || '').trim() || null;
+
   // Render commonly exposes a git commit SHA in env; fall back to empty.
   const gitCommit =
     String(process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.COMMIT_SHA || '').trim() || null;
@@ -71,9 +76,11 @@ app.get('/health', (_req, res) => {
     gitCommit,
     render: isRender,
     nodeEnv: String(process.env.NODE_ENV || ''),
+    authEnabled,
     serveFrontend,
     distFound,
     distLocation: pickedDist?.distLocation || null,
+    defaultBusLookupId,
   });
 });
 
