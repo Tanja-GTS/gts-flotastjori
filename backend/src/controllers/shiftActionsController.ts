@@ -220,7 +220,7 @@ export async function postAssignAndEmail(req: Request, res: Response) {
 
     const origin = getOrigin(req);
     const confirmToken = buildConfirmLinkToken({ shiftId: itemId });
-    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}`;
+    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}?auto=1`;
 
     const weekStart = weekStartMonday(shiftBefore.date);
     const weekRange = formatWeekRangeLabel(weekStart);
@@ -337,7 +337,7 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
     const origin = getOrigin(req);
     const weekToken = `week:${anchorItemId}`;
     const confirmToken = buildConfirmLinkToken({ shiftId: weekToken });
-    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}`;
+    const confirmUrl = `${origin}/confirm/${encodeURIComponent(confirmToken)}?auto=1`;
 
     const subject = `Please confirm: ${routeDisplay}${routeCodePart} (${weekInfo.anchor.time})${weekPartText} — week ${weekRange}`;
 

@@ -151,6 +151,10 @@ confirmRouter.get('/:token', async (req, res) => {
   try {
     const payload = verifyConfirmLink(String(req.params.token || ''));
     const preview = await loadShiftPreview(payload.shiftId);
+    const auto = (() => {
+      const v = String((req.query as any)?.auto ?? '').trim().toLowerCase();
+      return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+    })();
     if (!preview) {
       res.status(404).send(
         page({
@@ -171,6 +175,35 @@ confirmRouter.get('/:token', async (req, res) => {
               ${checkBadge({ label: 'Shift confirmed' })}
               ${preview.detailsHtml}
               <p style="margin-top:16px;color:#495057">This shift is already confirmed. You can close this tab.</p>
+            `,
+          })
+        );
+      return;
+    }
+
+    if (auto) {
+      // One-click email flow: opening the link auto-submits the existing POST.
+      // This avoids confirming via GET (which can be triggered by email link scanners/prefetch).
+      res
+        .status(200)
+        .send(
+          page({
+            title: 'Confirming shift…',
+            bodyHtml: `
+              ${preview.detailsHtml}
+              <p style="margin-top:16px;color:#495057">Confirming…</p>
+              <form id="confirmForm" method="post" style="margin-top:16px">
+                <button type="submit" style="display:inline-block;padding:10px 14px;background:#1971c2;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Confirm shift</button>
+              </form>
+              <script>
+                (function(){
+                  var f = document.getElementById('confirmForm');
+                  if (f && typeof f.submit === 'function') f.submit();
+                })();
+              </script>
+              <noscript>
+                <p style="margin-top:16px;color:#495057">JavaScript is disabled — tap the button above to confirm.</p>
+              </noscript>
             `,
           })
         );
