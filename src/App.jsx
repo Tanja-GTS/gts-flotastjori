@@ -259,7 +259,7 @@ export default function App() {
         const opts = (drivers || [])
           .map((d) => ({
             value: String(d.id),
-            label: d.email ? `${d.name} (${d.email})` : d.name,
+            label: d.name,
             name: d.name,
             email: d.email || '',
             phone: d.phone || '',
@@ -297,7 +297,7 @@ export default function App() {
         const opts = (drivers || [])
           .map((d) => ({
             value: String(d.id),
-            label: d.email ? `${d.name} (${d.email})` : d.name,
+            label: d.name,
             name: d.name,
             email: d.email || '',
             phone: d.phone || '',

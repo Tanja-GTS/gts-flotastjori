@@ -12,7 +12,7 @@ import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekO
 import { notifications } from '@mantine/notifications';
 import { useI18n } from './i18n';
 
-const fallbackDrivers = ['Ahmed', 'Maria', 'Jon', 'Sara'].map((name) => ({ value: name, label: name, name }));
+const fallbackDrivers = ['Ahmed', 'Jon', 'Maria', 'Sara'].map((name) => ({ value: name, label: name, name }));
 
 function formatTripShortName(tripName) {
   const raw = String(tripName || '').trim();
@@ -138,9 +138,18 @@ export default function Timeline({
   const driverSelectOptions = useMemo(() => {
     // Some workspaces have a placeholder Drivers-list entry like "🤷🏻‍♂️ Unassigned".
     // We hide that and instead offer a real unassign action via value "unassigned".
-    const real = (driverOptions || []).filter(
-      (o) => !/unassigned/i.test(String(o?.name || o?.label || ''))
-    );
+    const getDisplayName = (o) => String(o?.name || o?.label || o?.value || '').trim();
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+    const real = (driverOptions || [])
+      .filter((o) => !/unassigned/i.test(getDisplayName(o)))
+      .slice()
+      .sort((a, b) => {
+        const byName = collator.compare(getDisplayName(a), getDisplayName(b));
+        if (byName !== 0) return byName;
+        return collator.compare(String(a?.value || ''), String(b?.value || ''));
+      });
+
     return [unassignOption, ...real];
   }, [driverOptions, unassignOption]);
 
@@ -1362,6 +1371,51 @@ export default function Timeline({
                   onChange={setEditedDriverId}
                   placeholder="Assign driver"
                   clearable={false}
+                  size="lg"
+                  renderOption={({ option, checked }) => {
+                    const full = driverById.get(String(option.value)) || option;
+                    const name = String(full?.name || full?.label || option.label || '').trim();
+                    const email = String(full?.email || '').trim();
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div
+                            style={{
+                              fontSize: 16,
+                              lineHeight: 1.25,
+                              fontWeight: 500,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {name}
+                          </div>
+                          {email ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                lineHeight: 1.1,
+                                color: '#868e96',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {email}
+                            </div>
+                          ) : null}
+                        </div>
+                        {checked ? (
+                          <div style={{ marginLeft: 12, color: '#1c7ed6', fontSize: 14, fontWeight: 700 }}>✓</div>
+                        ) : null}
+                      </div>
+                    );
+                  }}
+                  styles={{
+                    input: { minHeight: 46, fontSize: 16 },
+                    option: { paddingTop: 12, paddingBottom: 12 },
+                  }}
                   mt="sm"
                 />
 
