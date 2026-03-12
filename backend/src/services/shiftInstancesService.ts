@@ -1079,6 +1079,8 @@ export async function getHydratedWeekShiftsForAnchor(params: {
   const anchor = await getHydratedShiftById(params.anchorItemId, { includeTrips: false });
   if (!anchor) return null;
 
+  const anchorPatternId = anchor.patternId ? String(anchor.patternId).trim() : '';
+
   const weekStart = weekStartMonday(anchor.date);
   const weekEnd = addDaysIso(weekStart, 6);
 
@@ -1100,6 +1102,16 @@ export async function getHydratedWeekShiftsForAnchor(params: {
   const sameGroup = weekInstances.filter((inst) => {
     const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
     if (!pattern) return false;
+
+    // Prefer grouping by patternId (template) when possible.
+    // This prevents distinct patterns that share route+shiftType (e.g. two "evening" runs)
+    // from being assigned together.
+    if (anchorPatternId) {
+      const instPatternId = inst.patternId ? String(inst.patternId).trim() : '';
+      if (!instPatternId) return false;
+      return instPatternId === anchorPatternId;
+    }
+
     if (!(pattern.route === anchor.route && pattern.shiftType === anchor.shiftType)) return false;
 
     const pWeekPart = String((pattern as any).weekPart || '').trim().toLowerCase();
