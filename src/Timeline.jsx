@@ -130,9 +130,20 @@ export default function Timeline({
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/ð/g, 'd');
 
+    const timeRaw = String(shift?.time || '').trim();
+    const time = timeRaw
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[–—−]/g, '-')
+      .replace(/[^0-9:\-]/g, '');
+
     const has51a = /\b51a\b/i.test(raw) || s.includes('51a');
     const hasKveldWord = s.includes('kvold') || s.includes('kveld');
-    return has51a && hasKveldWord;
+
+    // Targeted workaround: the 51A dinner shift is the evening run 19:29–21:30.
+    const looksLikeDinnerTime = time.includes('19:29') && time.includes('21:30');
+
+    return has51a && (hasKveldWord || looksLikeDinnerTime);
   }, []);
 
   const getShiftTypeLabel = useCallback(
