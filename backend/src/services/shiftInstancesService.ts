@@ -1,5 +1,5 @@
 import { getGraphAppToken } from './graphAuth';
-import { graphGet, graphPatch, graphPost } from './graphClient';
+import { graphDelete, graphGet, graphPatch, graphPost } from './graphClient';
 import {
   getGraphConfig,
   getListIds,
@@ -7,6 +7,7 @@ import {
   getShiftPatternsFieldNames,
 } from './msListsConfig';
 import { listShiftPatterns, type ShiftPatternDto } from './shiftPatternsService';
+import { listWorkspaces } from './workspacesService';
 import { optionalEnv } from '../utils/env';
 import { getTemplateDefaults } from './templatesService';
 import { resolveBusTitles } from './busesService';
@@ -32,6 +33,10 @@ export type ShiftInstanceDto = {
 export type HydratedShiftDto = {
   id: string;
   workspaceId: string;
+  // Workspace from the linked pattern (if available).
+  // Useful for detecting data issues where a ShiftInstance row has workspaceId='school'
+  // but references a ShiftPattern with workspaceId='south'.
+  patternWorkspaceId?: string;
   date: string; // YYYY-MM-DD
   route: string;
   routeName?: string;
@@ -53,6 +58,103 @@ export type HydratedShiftDto = {
   busId?: string;
   trips?: TripDto[];
 };
+
+type DeleteGeneratedResult = { deleted: number };
+
+function normalizeWorkspaceSlug(raw: unknown): string {
+  return String(raw || '').trim();
+}
+
+function isGlobalWorkspaceSlug(slug: string): boolean {
+  const s = normalizeWorkspaceSlug(slug).toLowerCase();
+  return s === '' || s === 'global' || s === 'all';
+}
+
+function pickEffectiveWorkspaceId(instanceWorkspaceId: string, patternWorkspaceId: string): string {
+  const inst = normalizeWorkspaceSlug(instanceWorkspaceId);
+  const pat = normalizeWorkspaceSlug(patternWorkspaceId);
+  if (!pat) return inst;
+  if (isGlobalWorkspaceSlug(pat)) return inst;
+  return pat;
+}
+
+function dedupeHydratedShifts(shifts: HydratedShiftDto[]): HydratedShiftDto[] {
+  const byKey = new Map<string, HydratedShiftDto>();
+  const passthrough: HydratedShiftDto[] = [];
+
+  for (const s of shifts) {
+    if (!s.workspaceId || !s.date || !s.patternId) {
+      passthrough.push(s);
+      continue;
+    }
+
+    const key = `${s.workspaceId}|${s.date}|${s.patternId}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, s);
+      continue;
+    }
+
+    // Prefer manual overrides, then assigned drivers, then notes.
+    const score = (x: HydratedShiftDto) => {
+      let v = 0;
+      if (x.manualOverride) v += 100;
+      if (x.driverId) v += 20;
+      if (x.notes && String(x.notes).trim()) v += 1;
+      return v;
+    };
+    const a = existing;
+    const b = s;
+    byKey.set(key, score(b) > score(a) ? b : a);
+  }
+
+  return [...byKey.values(), ...passthrough];
+}
+
+export async function deleteGeneratedShiftInstances(params: {
+  workspaceId: string;
+  month: string; // YYYY-MM
+}): Promise<DeleteGeneratedResult> {
+  const { workspaceId, month } = params;
+  const graph = getGraphConfig();
+  const lists = getListIds();
+  const token = await getGraphAppToken(graph);
+
+  const all = await listShiftInstances({ workspaceId, month });
+  const toDelete = all
+    .filter((s) => {
+      if (!s.generated) return false;
+      if (s.manualOverride) return false;
+
+      // Never delete shifts that appear to have been acted on.
+      // This prevents a reset from wiping driver assignments / confirmations / notes.
+      if (s.driverId) return false;
+      if (s.confirmationStatus && String(s.confirmationStatus).trim().toLowerCase() !== 'unassigned') return false;
+      if (s.notes && String(s.notes).trim()) return false;
+
+      return true;
+    })
+    .map((s) => s.id);
+
+  if (toDelete.length === 0) return { deleted: 0 };
+
+  const concurrency = Math.max(1, Math.min(20, Number(optionalEnv('DELETE_CONCURRENCY', '8')) || 8));
+  let deleted = 0;
+
+  await runWithConcurrency({
+    items: toDelete,
+    concurrency,
+    worker: async (id) => {
+      const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+        graph.siteId
+      )}/lists/${encodeURIComponent(lists.shiftInstancesListId)}/items/${encodeURIComponent(id)}`;
+      await graphDelete(url, token);
+      deleted += 1;
+    },
+  });
+
+  return { deleted };
+}
 
 async function patchShiftInstanceFields(params: {
   itemId: string;
@@ -116,6 +218,120 @@ type GraphListItemsResponse = {
   '@odata.nextLink'?: string;
 };
 
+type GraphColumn = Record<string, unknown> & {
+  name?: string;
+  displayName?: string;
+  lookup?: {
+    listId?: string;
+  };
+  text?: unknown;
+  choice?: unknown;
+  multiChoice?: unknown;
+};
+
+type GraphColumnsResponse = {
+  value: GraphColumn[];
+};
+
+type WorkspaceMaps = {
+  spItemIdBySlug: Map<string, string>;
+  slugBySpItemId: Map<string, string>;
+};
+
+let workspaceMapsCache: { fetchedAtMs: number; maps: WorkspaceMaps } | null = null;
+
+async function getWorkspaceMaps(): Promise<WorkspaceMaps> {
+  const ttlMs = Number(optionalEnv('WORKSPACES_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+  if (workspaceMapsCache && now - workspaceMapsCache.fetchedAtMs < ttlMs) return workspaceMapsCache.maps;
+
+  const workspaces = await listWorkspaces();
+  const spItemIdBySlug = new Map<string, string>();
+  const slugBySpItemId = new Map<string, string>();
+  for (const w of workspaces) {
+    const slug = String(w.id || '').trim();
+    const spId = String((w as any).spItemId || '').trim();
+    if (!slug || !spId) continue;
+    spItemIdBySlug.set(slug, spId);
+    slugBySpItemId.set(spId, slug);
+  }
+
+  const maps = { spItemIdBySlug, slugBySpItemId };
+  workspaceMapsCache = { fetchedAtMs: now, maps };
+  return maps;
+}
+
+let workspaceColumnCache:
+  | {
+      fetchedAtMs: number;
+      listId: string;
+      internalName: string;
+      kind: 'lookup' | 'choice' | 'text' | 'unknown';
+      lookupListId?: string;
+    }
+  | null = null;
+
+async function getWorkspaceColumnInfo(): Promise<{
+  kind: 'lookup' | 'choice' | 'text' | 'unknown';
+  lookupListId?: string;
+}> {
+  const ttlMs = Number(optionalEnv('SHIFTINSTANCES_COLUMNS_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+
+  const graph = getGraphConfig();
+  const lists = getListIds();
+  const f = getShiftInstancesFieldNames();
+  const listId = String(lists.shiftInstancesListId || '').trim();
+  const internalName = String(f.workspaceId || '').trim();
+
+  if (
+    workspaceColumnCache &&
+    workspaceColumnCache.listId === listId &&
+    workspaceColumnCache.internalName === internalName &&
+    now - workspaceColumnCache.fetchedAtMs < ttlMs
+  ) {
+    return {
+      kind: workspaceColumnCache.kind,
+      lookupListId: workspaceColumnCache.lookupListId,
+    };
+  }
+
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(listId)}/columns?$top=999`;
+  const res = await graphGet<GraphColumnsResponse>(url, token);
+  const cols = res.value || [];
+
+  const lowerInternal = internalName.toLowerCase();
+  const col =
+    cols.find((c) => String(c.name || '') === internalName) ||
+    cols.find((c) => String(c.displayName || '') === internalName) ||
+    cols.find((c) => String(c.displayName || '').toLowerCase() === 'workspaceid') ||
+    cols.find((c) => String(c.name || '').toLowerCase() === lowerInternal);
+
+  let kind: 'lookup' | 'choice' | 'text' | 'unknown' = 'unknown';
+  let lookupListId: string | undefined;
+  if (col?.lookup) {
+    kind = 'lookup';
+    lookupListId = String(col.lookup.listId || '').trim() || undefined;
+  } else if ((col as any)?.choice || (col as any)?.multiChoice) {
+    kind = 'choice';
+  } else if ((col as any)?.text) {
+    kind = 'text';
+  }
+
+  workspaceColumnCache = {
+    fetchedAtMs: now,
+    listId,
+    internalName,
+    kind,
+    lookupListId,
+  };
+
+  return { kind, lookupListId };
+}
+
 function asString(value: unknown): string {
   if (value == null) return '';
   return String(value);
@@ -148,6 +364,35 @@ function asBoolean(value: unknown): boolean | undefined {
 
 function normalizeDate(value: unknown): string {
   return asString(value).slice(0, 10);
+}
+
+function readWorkspaceId(params: {
+  fields: Record<string, unknown>;
+  internalName: string;
+  workspaceColumnKind: 'lookup' | 'choice' | 'text' | 'unknown';
+  slugBySpItemId?: Map<string, string>;
+}): string {
+  const { fields, internalName, workspaceColumnKind, slugBySpItemId } = params;
+
+  const direct = asString(fields[internalName]).trim();
+  if (direct && workspaceColumnKind !== 'lookup') return direct;
+
+  if (direct && workspaceColumnKind === 'lookup') {
+    // Graph sometimes provides the lookup value (ex: Title) directly.
+    // If it's already a slug, keep it; if it's numeric, try mapping.
+    if (!/^\d+$/.test(direct)) return direct;
+    const mapped = slugBySpItemId?.get(direct);
+    if (mapped) return mapped;
+  }
+
+  const lookupId = asString(fields[`${internalName}LookupId`]).trim();
+  if (lookupId) {
+    const mapped = slugBySpItemId?.get(lookupId);
+    if (mapped) return mapped;
+    return lookupId;
+  }
+
+  return direct;
 }
 
 function normalizeConfirmationStatus(value: unknown): string | undefined {
@@ -248,6 +493,9 @@ export async function listShiftInstances(params: {
 
   const token = await getGraphAppToken(graph);
 
+  const workspaceCol = await getWorkspaceColumnInfo();
+  const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
+
   function odataStringLiteral(raw: string): string {
     // Escape single quotes per OData string rules
     return `'${String(raw).replace(/'/g, "''")}'`;
@@ -260,6 +508,7 @@ export async function listShiftInstances(params: {
   const selectFields = Array.from(
     new Set([
       f.workspaceId,
+      ...(workspaceCol.kind === 'lookup' ? [`${f.workspaceId}LookupId`] : []),
       f.date,
       f.templateId,
       `${f.templateId}LookupId`,
@@ -278,7 +527,16 @@ export async function listShiftInstances(params: {
 
   const filterParts: string[] = [];
   if (params.workspaceId) {
-    filterParts.push(`fields/${f.workspaceId} eq ${odataStringLiteral(params.workspaceId)}`);
+    if (workspaceCol.kind === 'lookup') {
+      const spId = workspaceMaps?.spItemIdBySlug.get(String(params.workspaceId).trim());
+      if (spId) {
+        filterParts.push(`fields/${f.workspaceId}LookupId eq ${odataStringLiteral(spId)}`);
+      }
+      // If we can't map the slug -> list item id, skip server-side filtering
+      // and rely on local filtering below.
+    } else {
+      filterParts.push(`fields/${f.workspaceId} eq ${odataStringLiteral(params.workspaceId)}`);
+    }
   }
 
   const dateStart = params.startDate || (params.month ? monthStartEnd(params.month).start : undefined);
@@ -338,7 +596,12 @@ export async function listShiftInstances(params: {
       const fields = item.fields || {};
       const dto: ShiftInstanceDto = {
         id: item.id,
-        workspaceId: asString(fields[f.workspaceId]),
+        workspaceId: readWorkspaceId({
+          fields,
+          internalName: f.workspaceId,
+          workspaceColumnKind: workspaceCol.kind,
+          slugBySpItemId: workspaceMaps?.slugBySpItemId,
+        }),
         date: normalizeDate(fields[f.date]),
         templateId: readLookupId(fields, f.templateId) || undefined,
         patternId: readLookupId(fields, f.patternId) || undefined,
@@ -446,7 +709,59 @@ export async function generateShiftInstances(params: {
   const fInst = getShiftInstancesFieldNames();
   const fPat = getShiftPatternsFieldNames();
 
-  const patterns = await listShiftPatterns({ workspaceId });
+  const workspaceCol = await getWorkspaceColumnInfo();
+  const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
+
+  const patternsAll = await listShiftPatterns({ workspaceId, includeInvalid: true });
+  if (patternsAll.length === 0) {
+    throw new Error(
+      `No ShiftPatterns found for workspace “${workspaceId}”. Add rows to the ShiftPatterns list with workspaceId=${workspaceId}, then try Generate again.`
+    );
+  }
+
+  // Safety: if patterns aren't workspace-tagged, workspace-scoped generation can mix workspaces.
+  // Fail loudly with actionable guidance.
+  const hasAnyWorkspaceTag = patternsAll.some((p) => String((p as any).workspaceId || '').trim());
+  if (!hasAnyWorkspaceTag) {
+    throw new Error(
+      `ShiftPatterns do not appear to have a usable workspaceId field. ` +
+        `Refusing to generate for workspace “${workspaceId}” because it would mix patterns across workspaces. ` +
+        `Fix by adding a workspaceId column to ShiftPatterns (Text or Lookup), ` +
+        `or set PATTERN_FIELD_WORKSPACE_ID to your column’s internal name.`
+    );
+  }
+
+  const missingFor = (p: ShiftPatternDto): string[] => {
+    const missing: string[] = [];
+    const hasDay = Array.isArray(p.dayOfWeek) ? p.dayOfWeek.length > 0 : Boolean(p.dayOfWeek);
+    if (!String(p.route || '').trim()) missing.push('route');
+    if (!String(p.shiftType || '').trim()) missing.push('shiftType');
+    if (!hasDay) missing.push('dayOfWeek');
+    if (!String(p.startTime || '').trim()) missing.push('startTime');
+    if (!String(p.endTime || '').trim()) missing.push('endTime');
+    return missing;
+  };
+
+  const invalid = patternsAll
+    .map((p) => ({ p, missing: missingFor(p) }))
+    .filter((x) => x.missing.length > 0);
+
+  if (invalid.length > 0) {
+    const lines = invalid
+      .slice(0, 10)
+      .map(({ p, missing }) => {
+        const label = String(p.routeName || p.route || p.id || '').trim();
+        return `#${p.id} “${label}” missing: ${missing.join(', ')}`;
+      });
+    const more = invalid.length > 10 ? ` (+${invalid.length - 10} more)` : '';
+    throw new Error(
+      `ShiftPatterns for workspace “${workspaceId}” are incomplete. Fix these fields in the ShiftPatterns list, then Generate again:\n` +
+        lines.join('\n') +
+        more
+    );
+  }
+
+  const patterns = patternsAll;
   const existing = await listShiftInstances({ workspaceId, month });
 
   // Existing key: `${date}|${patternId}`
@@ -498,12 +813,23 @@ export async function generateShiftInstances(params: {
       const busLookupKey = `${fInst.busId}LookupId`;
 
       const fields: Record<string, unknown> = {
-        [fInst.workspaceId]: workspaceId,
         // Graph dateTime columns expect an ISO date-time.
         [fInst.date]: `${date}T00:00:00Z`,
         [fInst.generated]: true,
         [fInst.manualOverride]: false,
       };
+
+      if (workspaceCol.kind === 'lookup') {
+        const spId = workspaceMaps?.spItemIdBySlug.get(String(workspaceId).trim());
+        if (!spId) {
+          throw new Error(
+            `Workspace “${workspaceId}” is not present in the Workspaces list, but ShiftInstances.workspace is configured as a Lookup. Add the workspace to the Workspaces list (Title = slug), or switch the ShiftInstances workspace column back to Text/Choice.`
+          );
+        }
+        fields[`${fInst.workspaceId}LookupId`] = Number(spId);
+      } else {
+        fields[fInst.workspaceId] = workspaceId;
+      }
 
       // Set pattern lookup
       fields[patternLookupKey] = Number(pattern.id);
@@ -555,10 +881,15 @@ export async function listHydratedShifts(params: {
   workspaceId?: string;
   month?: string;
 }): Promise<HydratedShiftDto[]> {
+  const requestedWorkspaceId = normalizeWorkspaceSlug(params.workspaceId);
   const instances = await listShiftInstances(params);
 
-  // Build a pattern lookup map (only for patterns referenced by instances)
-  const patterns = await listShiftPatterns({ workspaceId: params.workspaceId });
+  // Build a pattern lookup map.
+  // IMPORTANT: don't scope patterns by workspace here.
+  // Instances can legitimately reference patterns whose workspaceId differs (ex: older generated items,
+  // manual items, or when patterns haven't been re-tagged yet). If we scope patterns here,
+  // shifts silently disappear for that workspace because hydration can't find the pattern.
+  const patterns = await listShiftPatterns({});
   const byId = new Map(patterns.map((p) => [p.id, p]));
 
   const busIds = instances.map((i) => i.busId).filter((v): v is string => Boolean(v));
@@ -570,12 +901,23 @@ export async function listHydratedShifts(params: {
   const templateIds = instances.map((i) => i.templateId).filter((v): v is string => Boolean(v));
   const tripsByTemplateId = await getTripsForTemplateIds({ templateIds });
 
-  return instances
-    .map((inst) => {
+  const hydrated = instances
+    .map((inst): HydratedShiftDto | null => {
       const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
       if (!pattern) return null;
 
-      return {
+      const patternWorkspaceId = normalizeWorkspaceSlug((pattern as any).workspaceId);
+
+      // If a workspace was requested, never allow a pattern tagged to a different workspace
+      // to be hydrated into this workspace. (Global patterns are allowed.)
+      if (requestedWorkspaceId) {
+        if (inst.workspaceId !== requestedWorkspaceId) return null;
+        if (patternWorkspaceId && !isGlobalWorkspaceSlug(patternWorkspaceId) && patternWorkspaceId !== requestedWorkspaceId) {
+          return null;
+        }
+      }
+
+      const base: HydratedShiftDto = {
         id: inst.id,
         workspaceId: inst.workspaceId,
         date: inst.date,
@@ -598,18 +940,22 @@ export async function listHydratedShifts(params: {
         // For the current UI, we still call this "defaultBus".
         defaultBus: inst.busId ? busTitles.get(inst.busId) || inst.busId : undefined,
         trips: inst.templateId ? tripsByTemplateId.get(inst.templateId) || [] : [],
-      } as HydratedShiftDto;
+      };
+
+      if (patternWorkspaceId) base.patternWorkspaceId = patternWorkspaceId;
+      return base;
     })
-    .filter(Boolean) as HydratedShiftDto[];
+    .filter((v): v is HydratedShiftDto => Boolean(v));
+
+  // When not filtering by workspace, we may have duplicates across workspaces due to bad data
+  // (ex: cloned instances with mismatched workspaceId). De-dupe using the effective workspace.
+  return dedupeHydratedShifts(hydrated);
 }
 
 export async function getHydratedShiftById(
-  itemId: string,
+  id: string,
   options?: { includeTrips?: boolean }
 ): Promise<HydratedShiftDto | null> {
-  const id = String(itemId || '').trim();
-  if (!id) return null;
-
   // Fetch the one instance by ID.
   const graph = getGraphConfig();
   const lists = getListIds();
@@ -624,9 +970,17 @@ export async function getHydratedShiftById(
   const item = await graphGet<GraphListItem>(url, token);
   const fields = item.fields || {};
 
+  const workspaceCol = await getWorkspaceColumnInfo();
+  const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
+
   const inst: ShiftInstanceDto = {
     id: item.id,
-    workspaceId: asString(fields[f.workspaceId]),
+    workspaceId: readWorkspaceId({
+      fields,
+      internalName: f.workspaceId,
+      workspaceColumnKind: workspaceCol.kind,
+      slugBySpItemId: workspaceMaps?.slugBySpItemId,
+    }),
     date: normalizeDate(fields[f.date]),
     templateId: readLookupId(fields, f.templateId) || undefined,
     patternId: readLookupId(fields, f.patternId) || undefined,
@@ -641,10 +995,14 @@ export async function getHydratedShiftById(
   if (!inst.workspaceId || !inst.date) return null;
 
   // Hydrate via patterns.
-  const patterns = await listShiftPatterns({ workspaceId: inst.workspaceId });
+  // See note in listHydratedShifts(): don't scope patterns here or the shift can disappear
+  // when the instance references a pattern tagged to a different workspace.
+  const patterns = await listShiftPatterns({});
   const byId = new Map(patterns.map((p) => [p.id, p]));
   const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
   if (!pattern) return null;
+
+  const patternWorkspaceId = normalizeWorkspaceSlug((pattern as any).workspaceId);
 
   const busTitles = await resolveBusTitles({ busIds: inst.busId ? [inst.busId] : [] });
   const driversById = await resolveDrivers({ driverIds: inst.driverId ? [inst.driverId] : [] });
@@ -656,6 +1014,7 @@ export async function getHydratedShiftById(
   return {
     id: inst.id,
     workspaceId: inst.workspaceId,
+    ...(patternWorkspaceId ? { patternWorkspaceId } : {}),
     date: inst.date,
     route: pattern.route,
     routeName: pattern.routeName,

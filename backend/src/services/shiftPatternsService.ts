@@ -3,6 +3,7 @@ import { graphGet } from './graphClient';
 import { getGraphConfig, getListIds, getShiftPatternsFieldNames } from './msListsConfig';
 import { resolveRouteTitles } from './routesService';
 import { getTemplateDefaults } from './templatesService';
+import { listWorkspaces } from './workspacesService';
 
 export type ShiftPatternDto = {
   id: string;
@@ -45,6 +46,45 @@ function readField(fields: Record<string, unknown>, fieldName: string): string {
   return asString(fields[fieldName]);
 }
 
+let workspaceSlugBySpIdCache: { fetchedAtMs: number; map: Map<string, string> } | null = null;
+
+async function getWorkspaceSlugBySpItemId(): Promise<Map<string, string>> {
+  // Keep TTL aligned with other list caches.
+  const ttlMs = 300000;
+  const now = Date.now();
+  if (workspaceSlugBySpIdCache && now - workspaceSlugBySpIdCache.fetchedAtMs < ttlMs) {
+    return workspaceSlugBySpIdCache.map;
+  }
+
+  const workspaces = await listWorkspaces();
+  const map = new Map<string, string>();
+  for (const w of workspaces) {
+    const slug = String(w.id || '').trim();
+    const spId = String((w as any).spItemId || '').trim();
+    if (slug && spId) map.set(spId, slug);
+  }
+  workspaceSlugBySpIdCache = { fetchedAtMs: now, map };
+  return map;
+}
+
+async function readWorkspaceSlug(fields: Record<string, unknown>, internalName: string): Promise<string> {
+  if (!internalName) return '';
+  const direct = asString(fields[internalName]).trim();
+  if (direct && !/^\d+$/.test(direct)) return direct;
+
+  const lookupId = asString(fields[`${internalName}LookupId`]).trim();
+  if (lookupId) {
+    const map = await getWorkspaceSlugBySpItemId();
+    return map.get(lookupId) || lookupId;
+  }
+
+  if (direct) {
+    const map = await getWorkspaceSlugBySpItemId();
+    return map.get(direct) || direct;
+  }
+  return '';
+}
+
 function readAny(fields: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
     if (!k) continue;
@@ -72,7 +112,10 @@ function normalizeWeekPart(value: string): string | undefined {
   return raw;
 }
 
-export async function listShiftPatterns(params?: { workspaceId?: string }): Promise<ShiftPatternDto[]> {
+export async function listShiftPatterns(params?: {
+  workspaceId?: string;
+  includeInvalid?: boolean;
+}): Promise<ShiftPatternDto[]> {
   const graph = getGraphConfig();
   const lists = getListIds();
   const f = getShiftPatternsFieldNames();
@@ -92,7 +135,8 @@ export async function listShiftPatterns(params?: { workspaceId?: string }): Prom
     nextUrl = page['@odata.nextLink'];
   }
 
-  const rawPatterns = allItems.map((item) => {
+  const rawPatterns = await Promise.all(
+    allItems.map(async (item) => {
     const fields = item.fields || {};
 
     // Provide sane fallbacks for common internal names in Microsoft Lists.
@@ -133,7 +177,7 @@ export async function listShiftPatterns(params?: { workspaceId?: string }): Prom
       dayOfWeek: Array.isArray(dayValue) ? asStringArray(dayValue) : asString(dayValue),
       startTime: asString(startValue),
       endTime: asString(endValue),
-      workspaceId: f.workspaceId ? readField(fields, f.workspaceId) || undefined : undefined,
+      workspaceId: f.workspaceId ? (await readWorkspaceSlug(fields, f.workspaceId)) || undefined : undefined,
       templateId: f.templateId ? readField(fields, f.templateId) || undefined : undefined,
     };
 
@@ -144,7 +188,8 @@ export async function listShiftPatterns(params?: { workspaceId?: string }): Prom
     }
 
     return { dto, title };
-  });
+    })
+  );
 
   // Prefer routeName coming from the ShiftTemplates/Templates list when available.
   // This matches your workflow: edit templates, and have all instances/patterns pick it up.
@@ -190,21 +235,32 @@ export async function listShiftPatterns(params?: { workspaceId?: string }): Prom
 
   const routeTitles = await resolveRouteTitles({ routeIds });
 
-  const patterns = enriched
+  const patternsAll = enriched
     .map((p) => ({
       ...p,
       route: routeTitles.get(p.route) || p.route,
-    }))
-    .filter((p) => {
-      const hasDay = Array.isArray(p.dayOfWeek) ? p.dayOfWeek.length > 0 : Boolean(p.dayOfWeek);
-      return p.route && p.shiftType && hasDay && p.startTime && p.endTime;
-    });
+    }));
+
+  const patternsValid = patternsAll.filter((p) => {
+    const hasDay = Array.isArray(p.dayOfWeek) ? p.dayOfWeek.length > 0 : Boolean(p.dayOfWeek);
+    return p.route && p.shiftType && hasDay && p.startTime && p.endTime;
+  });
+
+  const patterns = params?.includeInvalid ? patternsAll : patternsValid;
 
   if (params?.workspaceId) {
     // Only filter by workspace if the column exists / is configured
     const canFilter = patterns.some((p) => p.workspaceId != null);
     if (canFilter) {
-      return patterns.filter((p) => p.workspaceId === params.workspaceId);
+      const wanted = String(params.workspaceId || '').trim();
+      const scoped = patterns.filter((p) => String(p.workspaceId || '').trim() === wanted);
+
+      // If the workspace has explicit patterns, use them.
+      if (scoped.length > 0) return scoped;
+
+      // Otherwise, fall back to global patterns (no workspaceId).
+      // This makes "new workspace" usable immediately without requiring code changes.
+      return patterns.filter((p) => p.workspaceId == null);
     }
   }
 

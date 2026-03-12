@@ -164,3 +164,22 @@ export async function graphPatch<T>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+export async function graphDelete(url: string, accessToken: string): Promise<void> {
+  const res = await fetchWithRetry(
+    url,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    },
+    'DELETE'
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw graphHttpError('DELETE', res.status, text);
+  }
+}

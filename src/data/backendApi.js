@@ -131,6 +131,12 @@ export async function fetchDrivers() {
   return data.drivers || [];
 }
 
+export async function fetchWorkspaces() {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/workspaces`);
+  return data.workspaces || [];
+}
+
 export async function fetchShiftById(id) {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/shifts/${encodeURIComponent(id)}`);

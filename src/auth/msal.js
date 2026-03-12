@@ -1,5 +1,7 @@
 import { PublicClientApplication } from '@azure/msal-browser';
 
+let msalInstance = null;
+
 function requiredEnv(name) {
   const val = (import.meta.env?.[name] || '').trim();
   if (!val) throw new Error(`Missing env var: ${name}`);
@@ -18,7 +20,22 @@ export function isMsalConfigured() {
 // Get MSAL access token if configured
 export async function getMsalAccessToken({ apiScope }) {
   if (!isMsalConfigured()) return '';
-  // ...existing code for acquiring token...
+
+  const scope = (apiScope || '').trim() || requiredEnv('VITE_ENTRA_API_SCOPE');
+  const instance = await ensureMsalInitialized();
+  const account = await getSignedInAccount();
+  if (!account) return '';
+
+  try {
+    const result = await instance.acquireTokenSilent({
+      account,
+      scopes: ['openid', 'profile', 'email', scope],
+    });
+    return result?.accessToken || '';
+  } catch {
+    // If the browser requires interaction, the UI should call startLogin().
+    return '';
+  }
 }
 
 // Dummy MSAL instance for staging

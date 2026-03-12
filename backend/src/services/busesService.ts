@@ -169,6 +169,7 @@ export async function listBuses(): Promise<Array<{ id: string; title: string; ro
     routeIdToLabel.set(id, title);
   }
 
+  const debugEnabled = String(process.env.DEBUG_LIST_BUSES || '').trim() === '1';
   const debug: Array<{id: string; title: string; routeId: string; routeLabel: string; fields: Record<string, unknown>}> = [];
   const result = allItems
     .map((item) => {
@@ -178,12 +179,14 @@ export async function listBuses(): Promise<Array<{ id: string; title: string; ro
       const routeId = asString(fields['RouteLookupId'] || fields['Route'] || '');
       const routeLabel = routeIdToLabel.get(routeId) || '';
       const title = busIdToTitle.get(id) || id;
-      debug.push({id, title, routeId, routeLabel, fields});
+      if (debugEnabled) debug.push({id, title, routeId, routeLabel, fields});
       return { id, title, routeId: routeId || undefined, routeLabel: routeLabel || undefined };
     })
     .filter((b) => b.id);
-  // eslint-disable-next-line no-console
-  console.log('[listBuses] debug:', JSON.stringify(debug, null, 2));
+  if (debugEnabled) {
+    // eslint-disable-next-line no-console
+    console.log('[listBuses] debug:', JSON.stringify(debug, null, 2));
+  }
   return result;
 }
 

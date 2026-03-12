@@ -50,8 +50,9 @@ export function getShiftPatternsFieldNames() {
     startTime: optionalEnv('PATTERN_FIELD_START_TIME', 'startTime'),
     endTime: optionalEnv('PATTERN_FIELD_END_TIME', 'endTime'),
 
-    // Optional if you have it (not in your list yet)
-    workspaceId: optionalEnv('PATTERN_FIELD_WORKSPACE_ID', ''),
+    // Optional, but strongly recommended: enables correct per-workspace generation/filtering.
+    // If your internal column name differs, override via PATTERN_FIELD_WORKSPACE_ID.
+    workspaceId: optionalEnv('PATTERN_FIELD_WORKSPACE_ID', 'workspaceId'),
     templateId: optionalEnv('PATTERN_FIELD_TEMPLATE_ID', ''),
   };
 }

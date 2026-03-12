@@ -5,7 +5,7 @@ import ConfirmShift from './ConfirmShift';
 import ErrorBoundary from './ErrorBoundary';
 import { WORKSPACES } from './workspaces';
 import PrintDay from './PrintDay';
-import { fetchBuses, fetchDrivers, fetchShifts, generateShifts } from './data/backendApi';
+import { fetchBuses, fetchDrivers, fetchShifts, fetchWorkspaces, generateShifts } from './data/backendApi';
 import { useI18n } from './i18n';
 
 function isMsalConfiguredFromEnv() {
@@ -107,7 +107,32 @@ export default function App() {
   const canCallApi = backendAuthEnabled ? authStatus === 'signed-in' : true;
 
   const [shifts, setShifts] = useState([]);
-  const [workspaceId, setWorkspaceId] = useState(WORKSPACES[0].id);
+  const [workspaces, setWorkspaces] = useState([]);
+  const fallbackWorkspaces = useMemo(() => WORKSPACES, []);
+
+  const workspaceOptions = useMemo(() => {
+    const src = Array.isArray(workspaces) && workspaces.length ? workspaces : fallbackWorkspaces;
+    return (src || [])
+      .map((w) => ({
+        value: String(w.id || '').trim(),
+        label: String(w.name || w.id || '').trim(),
+      }))
+      .filter((w) => w.value && w.label);
+  }, [workspaces, fallbackWorkspaces]);
+
+  const [workspaceId, setWorkspaceId] = useState(() => {
+    if (typeof window === 'undefined') return WORKSPACES[0].id;
+    const saved = String(localStorage.getItem('fleetScheduler.workspaceId') || '').trim();
+    return saved || WORKSPACES[0].id;
+  });
+
+  useEffect(() => {
+    try {
+      if (workspaceId) localStorage.setItem('fleetScheduler.workspaceId', workspaceId);
+    } catch {
+      // ignore
+    }
+  }, [workspaceId]);
 
   const [visibleRange, setVisibleRange] = useState({ start: null, end: null, viewDays: 7 });
   const [isLoadingShifts, setIsLoadingShifts] = useState(false);
@@ -124,6 +149,34 @@ export default function App() {
   const [busOptions, setBusOptions] = useState([]);
   const [driverOptions, setDriverOptions] = useState([]);
   const [didBackfillDriverPhones, setDidBackfillDriverPhones] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!canCallApi) return () => {
+      cancelled = true;
+    };
+
+    fetchWorkspaces()
+      .then((ws) => {
+        if (cancelled) return;
+        const list = Array.isArray(ws) ? ws : [];
+        setWorkspaces(list);
+
+        const ids = new Set(list.map((w) => String(w?.id || '').trim()).filter(Boolean));
+        if (ids.size > 0 && !ids.has(String(workspaceId || '').trim())) {
+          const first = list.map((w) => String(w?.id || '').trim()).find(Boolean);
+          if (first) setWorkspaceId(first);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWorkspaces([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canCallApi, workspaceId]);
 
   useEffect(() => {
     if (!isGenerating || !generateStartedAtMs) return;
@@ -301,7 +354,7 @@ export default function App() {
     } finally {
       setIsLoadingShifts(false);
     }
-  }, [workspaceId, monthsToFetch, t, loadShiftsForMonths]);
+  }, [workspaceId, monthsToFetch, t, loadShiftsForMonths, backendAuthEnabled, authStatus]);
 
   useEffect(() => {
     if (!canCallApi) return;
@@ -370,6 +423,7 @@ export default function App() {
               setShifts={setShifts}
               workspaceId={workspaceId}
               setWorkspaceId={setWorkspaceId}
+              workspaceOptions={workspaceOptions}
               busOptions={busOptions}
               driverOptions={driverOptions}
               onRangeChange={setVisibleRange}

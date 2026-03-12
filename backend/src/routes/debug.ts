@@ -7,6 +7,7 @@ import { getListFieldsById, getSiteLists } from '../controllers/debugSiteControl
 import { getStopsTemplateDebug } from '../controllers/debugStopsTemplateController';
 import { getStopsTemplateBreakRows } from '../controllers/debugStopsTemplateBreaksController';
 import { getEnvDebug } from '../controllers/debugEnvController';
+import { getSearchPatterns } from '../controllers/debugPatternsSearchController';
 
 export const debugRouter = Router();
 
@@ -49,6 +50,9 @@ debugRouter.get('/token-info', getTokenInfo);
 
 // Debug: try different PATCH payload shapes for confirmationStatus.
 debugRouter.post('/instances/:id/confirmation', postPatchConfirmationStatus);
+
+// Search the ShiftPatterns list for debugging (ex: q=olfus)
+debugRouter.get('/search-patterns', getSearchPatterns);
 
 // Add the new debugEnvController endpoint to the debug router
 debugRouter.get('/list-fields-any', getEnvDebug);

@@ -34,6 +34,52 @@ The frontend has a small built-in i18n helper with English (`en`) and Icelandic 
 
 Language selection is stored in the browser in localStorage (`fleetScheduler.lang`).
 
+## Workspaces (self-serve, no code changes)
+
+By default the UI shows a workspace selector. The app can load workspaces dynamically from Microsoft Lists so you can add a new workspace by editing SharePoint data (not source code).
+
+### Option A (recommended): Create a Microsoft List named “Workspaces”
+
+1) In the same SharePoint site as your other lists, create a new list named **Workspaces**.
+2) Add these columns:
+
+- **Title** (built-in, Single line of text) — store the stable workspace slug used everywhere (example: `school`, `south`, `airport`)
+- `name` (Single line of text) — human name shown in the UI (optional; falls back to Title)
+- Optional: `sortOrder` (Number) — controls ordering in the menu
+- Optional: `enabled` (Yes/No) — set to No to hide a workspace
+
+If you already have a custom text column named `workspaceId`, the backend will also accept that — but using **Title** is the most “SharePoint-native” setup.
+
+The backend will auto-detect the list by name and expose it at:
+
+- `GET /api/workspaces`
+
+The frontend will use this list automatically.
+
+### Option B: Set the Workspaces list id explicitly
+
+If your list has a different name (or auto-detect fails), set this in `backend/.env` (and in Render env for production):
+
+- `MS_WORKSPACES_LIST_ID=<GUID>`
+
+### Critical data rule
+
+The app shows shifts per workspace based on the `workspaceId` stored on each **ShiftInstance**.
+
+- Generated shifts: the generator writes `workspaceId` when creating ShiftInstances.
+- Manual entries (if you ever create instances by hand): must include `workspaceId` too.
+
+If you want shift generation to be workspace-specific, your **ShiftPatterns** list should also have a `workspaceId` column (or configure `PATTERN_FIELD_WORKSPACE_ID` to match your internal name).
+
+### Recommended (for truly self-serve): make `workspaceId` a Lookup
+
+If your ShiftInstances workspace column is a **Choice** column, adding a new workspace still requires updating the choice options in SharePoint.
+
+To avoid that, make the ShiftInstances (and optionally ShiftPatterns) workspace column a **Lookup** to the Workspaces list (using Workspaces **Title** as the lookup value). The backend supports:
+
+- Text/Choice workspace fields (stores the slug directly)
+- Lookup workspace fields (stores a Workspaces list item id, and maps it back to the slug)
+
 ## Backend
 
 Install backend deps from the repo root:

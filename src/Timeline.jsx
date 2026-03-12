@@ -43,6 +43,7 @@ export default function Timeline({
   setShifts,
   workspaceId,
   setWorkspaceId,
+  workspaceOptions: workspaceOptionsProp,
   busOptions = [],
   driverOptions = [],
   onRangeChange,
@@ -61,14 +62,15 @@ export default function Timeline({
   const navigate = useNavigate();
   const { lang, setLang, t, locale } = useI18n();
 
-  const workspaceOptions = useMemo(
-    () => [
+  const workspaceOptions = useMemo(() => {
+    const list = Array.isArray(workspaceOptionsProp) ? workspaceOptionsProp : [];
+    if (list.length) return list;
+    return [
       { value: 'south', label: 'South Iceland' },
       { value: 'school', label: 'School Transport' },
       { value: 'airport', label: 'Airport Transfers' },
-    ],
-    []
-  );
+    ];
+  }, [workspaceOptionsProp]);
 
   const routes = selectRoutesForWorkspace(shifts, workspaceId);
   const routeOptions = routes.map((route) => ({ value: route, label: route }));
