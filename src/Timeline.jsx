@@ -135,7 +135,7 @@ export default function Timeline({
       .toLowerCase()
       .replace(/\s+/g, '')
       .replace(/[–—−]/g, '-')
-      .replace(/[^0-9:\-]/g, '');
+      .replace(/[^0-9:-]/g, '');
 
     const has51a = /\b51a\b/i.test(raw) || s.includes('51a');
     const hasKveldWord = s.includes('kvold') || s.includes('kveld');
