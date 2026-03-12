@@ -118,11 +118,39 @@ export default function Timeline({
 
   const visibleShifts = selectVisibleShifts(shifts, workspaceId, routes);
 
-  const getShiftCardTitle = useCallback((shift, rowShiftType) => {
-    const route = String(shift?.route || '').trim();
-    const typeLabel = SHIFT_TYPE_LABELS[rowShiftType] || '';
-    return [route, typeLabel].filter(Boolean).join(' ').trim();
+  const isDinnerShift = useCallback((shift) => {
+    const raw = [shift?.route, shift?.routeName, shift?.name]
+      .filter(Boolean)
+      .map((x) => String(x))
+      .join(' ');
+    const s = raw.toLowerCase();
+
+    const has51a = /\b51a\b/i.test(raw) || s.includes('51a');
+    const hasKveldWord = /kv(ö|o)ld/i.test(raw) || s.includes('kveld');
+    return has51a && hasKveldWord;
   }, []);
+
+  const getShiftTypeLabel = useCallback(
+    (shift, shiftTypeKey) => {
+      const key = String(shiftTypeKey || '').trim().toLowerCase();
+      if (key === 'evening' && isDinnerShift(shift)) return 'Dinner';
+      return SHIFT_TYPE_LABELS[key] || String(shiftTypeKey || '').trim();
+    },
+    [isDinnerShift]
+  );
+
+  const getShiftCardTitle = useCallback(
+    (shift, rowShiftType) => {
+      const route = String(shift?.route || '').trim();
+      const typeLabel = getShiftTypeLabel(shift, rowShiftType) || '';
+      const typeLabelForCard =
+        String(rowShiftType || '').trim().toLowerCase() === 'evening' && isDinnerShift(shift)
+          ? 'Dinner shift'
+          : typeLabel;
+      return [route, typeLabelForCard].filter(Boolean).join(' ').trim();
+    },
+    [getShiftTypeLabel, isDinnerShift]
+  );
 
   const unassignOption = useMemo(
     () => ({
@@ -1096,7 +1124,7 @@ export default function Timeline({
                     {dayShifts.map((shift, i) => (
                       (() => {
                         const cardTitle = getShiftCardTitle(shift, shiftType);
-                        const shiftTypeLabel = SHIFT_TYPE_LABELS[shiftType] || String(shiftType || '');
+                        const shiftTypeLabel = getShiftTypeLabel(shift, shiftType) || String(shiftType || '');
                         const driverLabel = shift.driver === 'Unassigned' ? t('common.unassignedUpper') : shift.driver;
                         const ariaTitle = cardTitle ? ` — ${cardTitle}` : '';
 
@@ -1300,7 +1328,17 @@ export default function Timeline({
               {selectedShift.routeName && selectedShift.routeName !== selectedShift.route && (
                 <p><strong>Route name:</strong> {selectedShift.routeName}</p>
               )}
-              <p><strong>Shift type:</strong> {SHIFT_TYPE_LABELS[selectedShift.shiftType] || selectedShift.shiftType}</p>
+              <p>
+                <strong>Shift type:</strong>{' '}
+                {(() => {
+                  const normalized = selectedShift ? normalizeShiftType(selectedShift) : '';
+                  const base = normalized
+                    ? getShiftTypeLabel(selectedShift, normalized)
+                    : String(SHIFT_TYPE_LABELS[selectedShift?.shiftType] || selectedShift?.shiftType || '').trim();
+
+                  return normalized === 'evening' && isDinnerShift(selectedShift) ? `${base} shift` : base;
+                })()}
+              </p>
               <p><strong>Time:</strong> {selectedShift.time}</p>
 
               {(() => {
@@ -1452,9 +1490,13 @@ export default function Timeline({
 
                     const shiftRoute = String(selectedShift?.route || '').trim();
                     const normalizedType = selectedShift ? normalizeShiftType(selectedShift) : '';
-                    const shiftTypeLabel = normalizedType
-                      ? SHIFT_TYPE_LABELS[normalizedType] || normalizedType
+                    const baseTypeLabel = normalizedType
+                      ? getShiftTypeLabel(selectedShift, normalizedType)
                       : String(selectedShift?.shiftType || '').trim();
+                    const shiftTypeLabel =
+                      normalizedType === 'evening' && isDinnerShift(selectedShift)
+                        ? 'Dinner shift'
+                        : baseTypeLabel;
                     const shiftTime = String(selectedShift?.time || '').trim();
 
                     const iso = String(selectedShift?.date || '').slice(0, 10);
