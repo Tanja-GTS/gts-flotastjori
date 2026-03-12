@@ -123,10 +123,15 @@ export default function Timeline({
       .filter(Boolean)
       .map((x) => String(x))
       .join(' ');
-    const s = raw.toLowerCase();
+
+    const s = raw
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ð/g, 'd');
 
     const has51a = /\b51a\b/i.test(raw) || s.includes('51a');
-    const hasKveldWord = /kv(ö|o)ld/i.test(raw) || s.includes('kveld');
+    const hasKveldWord = s.includes('kvold') || s.includes('kveld');
     return has51a && hasKveldWord;
   }, []);
 
