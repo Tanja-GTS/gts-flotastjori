@@ -58,6 +58,19 @@ export function I18nProvider({ children }) {
 
       const raw = getByPath(langTable, key) ?? getByPath(enTable, key) ?? key;
 
+      // Minimal plural support: allow translation leaf values to be
+      // { one: '...', other: '...' } and select based on vars.count.
+      if (
+        raw &&
+        typeof raw === 'object' &&
+        Array.isArray(raw) === false &&
+        (Object.prototype.hasOwnProperty.call(raw, 'one') || Object.prototype.hasOwnProperty.call(raw, 'other'))
+      ) {
+        const count = Number(vars?.count);
+        const form = count === 1 ? raw.one : raw.other;
+        if (typeof form === 'string') return interpolate(form, vars);
+      }
+
       if (typeof raw === 'string') return interpolate(raw, vars);
       return raw;
     },

@@ -79,7 +79,10 @@ export const translations = {
         noPhoneInDriversList: 'No phone number in Drivers list.',
         driverNotFoundNoPhone: 'Driver not found in Drivers list (no phone available).',
 
-        notesForThisShift: '⚠️ {count} note for this shift',
+        notesForThisShift: {
+          one: '⚠️ 1 note for this shift',
+          other: '⚠️ {count} notes for this shift',
+        },
         edit: 'Edit',
         addNote: 'Add note',
         notesPlaceholder: 'Describe what happened during this shift…',
@@ -261,7 +264,10 @@ export const translations = {
       noPhoneInDriversList: 'Ekkert símanúmer í bílstjóralista.',
       driverNotFoundNoPhone: 'Bílstjóri fannst ekki í bílstjóralista (ekkert símanúmer).',
 
-      notesForThisShift: '⚠️ {count} athugasemd fyrir þessa vakt',
+      notesForThisShift: {
+        one: '⚠️ 1 athugasemd fyrir þessa vakt',
+        other: '⚠️ {count} athugasemdir fyrir þessa vakt',
+      },
       edit: 'Breyta',
       addNote: 'Bæta við athugasemd',
       notesPlaceholder: 'Lýstu því sem gerðist í þessari vakt…',
