@@ -1642,7 +1642,7 @@ export default function Timeline({
                     onClick={() => setShowNotes((v) => !v)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <strong style={{ fontSize: 13 }}>⚠️ 1 note for this trip</strong>
+                      <strong style={{ fontSize: 13 }}>{t('timeline.drawer.notesForThisShift', { count: 1 })}</strong>
                       <span style={{ display: 'inline-flex', alignItems: 'center', color: '#444' }}>
                         {showNotes ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
                       </span>
@@ -1666,7 +1666,7 @@ export default function Timeline({
                               setEditedNote(existingNote); 
                             }}
                           >
-                            Edit
+                            {t('timeline.drawer.edit')}
                           </Button>
                         </div>
                       )}
@@ -1681,7 +1681,7 @@ export default function Timeline({
                     setEditedNote(''); 
                   }}
                 >
-                  Add note
+                  {t('timeline.drawer.addNote')}
                 </Button>
               )}
 
@@ -1690,7 +1690,7 @@ export default function Timeline({
                   <textarea
                     value={editedNote}
                     onChange={(e) => setEditedNote(e.target.value)}
-                    placeholder="Describe what happened during this shift…"
+                    placeholder={t('timeline.drawer.notesPlaceholder')}
                     style={{
                       width: '100%',
                       minHeight: 80,
@@ -1715,17 +1715,17 @@ export default function Timeline({
                         if (editedNote.trim()) setShowNotes(true);
                       }}
                     >
-                      Save changes
+                      {t('timeline.drawer.saveChanges')}
                     </Button>
                   </div>
                 </div>
               )}
 
-              <h4 style={{ marginBottom: 8, marginTop: 24 }}>Trips</h4>
+              <h4 style={{ marginBottom: 8, marginTop: 24 }}>{t('timeline.drawer.trips')}</h4>
 
               {selectedTrips.length === 0 && (
                 <p style={{ fontSize: 13, color: '#777' }}>
-                  No trips defined for this shift.
+                  {t('timeline.drawer.noTripsDefined')}
                 </p>
               )}
 
@@ -1747,7 +1747,7 @@ export default function Timeline({
       size="xs"
       data={busOptions}
       value={getTripBusPlate(trip) || null}
-      placeholder="Bus"
+      placeholder={t('timeline.drawer.bus')}
       clearable
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
@@ -1768,7 +1768,7 @@ export default function Timeline({
                               </>
                             ) : (
                               <em>
-                                Break{ev.label ? ` (${ev.label})` : ''} — {ev.duration} min
+                                {t('timeline.drawer.break')}{ev.label ? ` (${ev.label})` : ''} — {ev.duration} min
                               </em>
                             )}
                           </li>

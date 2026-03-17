@@ -78,6 +78,17 @@ export const translations = {
 
         noPhoneInDriversList: 'No phone number in Drivers list.',
         driverNotFoundNoPhone: 'Driver not found in Drivers list (no phone available).',
+
+        notesForThisShift: '⚠️ {count} note for this shift',
+        edit: 'Edit',
+        addNote: 'Add note',
+        notesPlaceholder: 'Describe what happened during this shift…',
+        saveChanges: 'Save changes',
+
+        trips: 'Trips',
+        noTripsDefined: 'No trips defined for this shift.',
+        bus: 'Bus',
+        break: 'Break',
       },
     },
     printDay: {
@@ -249,6 +260,17 @@ export const translations = {
 
       noPhoneInDriversList: 'Ekkert símanúmer í bílstjóralista.',
       driverNotFoundNoPhone: 'Bílstjóri fannst ekki í bílstjóralista (ekkert símanúmer).',
+
+      notesForThisShift: '⚠️ {count} athugasemd fyrir þessa vakt',
+      edit: 'Breyta',
+      addNote: 'Bæta við athugasemd',
+      notesPlaceholder: 'Lýstu því sem gerðist í þessari vakt…',
+      saveChanges: 'Vista breytingar',
+
+      trips: 'Ferðir',
+      noTripsDefined: 'Engar ferðir skilgreindar fyrir þessa vakt.',
+      bus: 'Bíll',
+      break: 'Hlé',
     },
   },
 
