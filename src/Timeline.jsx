@@ -14,6 +14,21 @@ import { useI18n } from './i18n';
 
 const fallbackDrivers = ['Ahmed', 'Jon', 'Maria', 'Sara'].map((name) => ({ value: name, label: name, name }));
 
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function weekdayKeyFromDate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const jsDay = d.getDay();
+  const mondayFirstIndex = (jsDay + 6) % 7; // Mon=0 ... Sun=6
+  return WEEKDAY_KEYS[mondayFirstIndex] || 'mon';
+}
+
+function monthKeyFromDate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  return MONTH_KEYS[d.getMonth()] || 'jan';
+}
+
 function formatTripShortName(tripName) {
   const raw = String(tripName || '').trim();
   if (!raw) return '';
@@ -61,6 +76,11 @@ export default function Timeline({
 }) {
   const navigate = useNavigate();
   const { lang, setLang, t, locale } = useI18n();
+
+  const langToggleLabel = lang === 'is' ? 'EN' : 'ÍS';
+  const monthLong = useCallback((d) => t(`date.months.${monthKeyFromDate(d)}`), [t]);
+  const monthShort = useCallback((d) => t(`date.monthsShort.${monthKeyFromDate(d)}`), [t]);
+  const weekdayShort = useCallback((d) => t(`date.weekdaysShort.${weekdayKeyFromDate(d)}`), [t]);
 
   const workspaceOptions = useMemo(() => {
     const list = Array.isArray(workspaceOptionsProp) ? workspaceOptionsProp : [];
@@ -497,9 +517,9 @@ export default function Timeline({
     () =>
       Array.from({ length: 12 }).map((_, monthIndex) => ({
         value: String(monthIndex),
-        label: new Date(2026, monthIndex, 1).toLocaleDateString(locale, { month: 'long' }),
+        label: t(`date.months.${MONTH_KEYS[monthIndex]}`),
       })),
-    [locale]
+    [t]
   );
 
   const yearOptions = useMemo(() => {
@@ -656,7 +676,7 @@ export default function Timeline({
 
   const daysWithNames = dayDates.map((date) => ({
     date,
-    name: date.toLocaleDateString(locale, { weekday: 'short' }),
+    name: weekdayShort(date),
   }));
 
   return (
@@ -682,15 +702,15 @@ export default function Timeline({
                 <button
                   className="workspaceControl"
                   type="button"
-                  aria-label="Workspace"
+                  aria-label={t('common.workspace')}
                   aria-expanded={workspaceOpened}
                   aria-controls="workspace-menu"
                   onClick={() => setWorkspaceOpened((o) => !o)}
                 >
                   <div className="workspaceControl__text">
-                    <div className="workspaceControl__label">Workspace</div>
+                    <div className="workspaceControl__label">{t('common.workspace')}</div>
                     <div className="workspaceControl__value">
-                      {workspaceOptions.find((w) => w.value === workspaceId)?.label || 'Select workspace'}
+                      {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
                     </div>
                   </div>
                   <svg
@@ -747,22 +767,22 @@ export default function Timeline({
                   className="appHeader__addShift"
                   type="button"
                   onClick={() => onSignIn().catch(() => {})}
-                  aria-label="Sign in"
-                  title={authError || 'Sign in to load and generate shifts'}
+                  aria-label={t('common.signIn')}
+                  title={authError || t('common.signInHint')}
                 >
-                  Sign in
+                  {t('common.signIn')}
                 </button>
               )}
               <button
                 className="appHeader__addShift"
                 type="button"
                 onClick={() => setAddMode(true)}
-                aria-label="Add a shift"
+                aria-label={t('timeline.addShift')}
               >
                 <span className="appHeader__addShiftIcon" aria-hidden="true">
                   +
                 </span>
-                Add a shift
+                {t('timeline.addShift')}
               </button>
               <button
                 className="appHeader__lang"
@@ -770,7 +790,7 @@ export default function Timeline({
                 aria-label={t('lang.label')}
                 onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
               >
-                {lang === 'is' ? 'ÍS' : 'EN'}
+                {langToggleLabel}
               </button>
             </div>
           </div>
@@ -814,21 +834,21 @@ export default function Timeline({
                 <button
                   className={`monthbar__dropdown${monthYearOpened ? ' is-open' : ''}`}
                   type="button"
-                  aria-label="Select month and year"
+                  aria-label={t('timeline.selectMonthYear')}
                   onClick={() => setMonthYearOpened((o) => !o)}
                 >
                   <IconChevronDown className="monthbar__chev" size={18} aria-hidden="true" />
                   <span className="monthbar__text">
-                    {currentWeekStart.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                    {monthLong(currentWeekStart)} {currentWeekStart.getFullYear()}
                   </span>
                 </button>
 
-                <div className="monthbar__nav" aria-label="Change week">
+                <div className="monthbar__nav" aria-label={t('timeline.changeWeek')}>
                   <button
                     className="monthbar__navBtn"
                     type="button"
                     onClick={handlePrevious}
-                    aria-label="Previous week"
+                    aria-label={t('timeline.previousWeek')}
                   >
                     <IconChevronLeft size={22} aria-hidden="true" />
                   </button>
@@ -837,7 +857,7 @@ export default function Timeline({
                     className="monthbar__navBtn"
                     type="button"
                     onClick={handleNext}
-                    aria-label="Next week"
+                    aria-label={t('timeline.nextWeek')}
                   >
                     <IconChevronRight size={22} aria-hidden="true" />
                   </button>
@@ -894,7 +914,7 @@ export default function Timeline({
             variant="default"
             className="todayBtn"
             onClick={handleToday}
-            aria-label="Go to current week"
+            aria-label={t('timeline.goToCurrentWeek')}
           >
             {t('common.today')}
           </Button>
@@ -1045,7 +1065,7 @@ export default function Timeline({
 
             {/* day headers */}
             {daysWithNames.map(({ date, name }, i) => {
-              const dateStr = `${date.getDate()} ${date.toLocaleDateString(locale, { month: 'short' })}`;
+              const dateStr = `${date.getDate()} ${monthShort(date)}`;
               const isToday = format(date, 'yyyy-MM-dd') === todayISO;
               const isSelected =
                 selectedDates.length === 0 ||
@@ -1519,22 +1539,22 @@ export default function Timeline({
                     const selectedDate = iso ? parseISO(iso) : null;
 
                     const day2 = (d) => d.toLocaleDateString(locale, { day: '2-digit' });
-                    const monthLong = (d) => d.toLocaleDateString(locale, { month: 'long' });
-                    const dowShort = (d) => d.toLocaleDateString(locale, { weekday: 'short' });
+                    const monthLong2 = (d) => monthLong(d);
+                    const dowShort = (d) => weekdayShort(d);
 
                     const formatRangeHuman = (start, end) => {
                       const sameMonth =
                         start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
                       const datePart = sameMonth
-                        ? `${day2(start)}–${day2(end)} ${monthLong(end)}`
-                        : `${day2(start)} ${monthLong(start)} – ${day2(end)} ${monthLong(end)}`;
+                        ? `${day2(start)}–${day2(end)} ${monthLong2(end)}`
+                        : `${day2(start)} ${monthLong2(start)} – ${day2(end)} ${monthLong2(end)}`;
                       return `${datePart} (${dowShort(start)}–${dowShort(end)})`;
                     };
 
                     let scopeText = assignOnlyThisShift ? 'This shift only' : 'Whole week';
                     if (selectedDate && !Number.isNaN(selectedDate.getTime())) {
                       if (assignOnlyThisShift) {
-                        scopeText = `${day2(selectedDate)} ${monthLong(selectedDate)} (${dowShort(selectedDate)})`;
+                        scopeText = `${day2(selectedDate)} ${monthLong2(selectedDate)} (${dowShort(selectedDate)})`;
                       } else {
                         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
                         const dow = selectedDate.getDay();

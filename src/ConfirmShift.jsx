@@ -7,6 +7,8 @@ import { useI18n } from './i18n';
 
 export default function ConfirmShift({ shifts, setShifts }) {
   const { lang, setLang, t, locale } = useI18n();
+  const langToggleLabel = lang === 'is' ? 'EN' : 'ÍS';
+  const toggleLang = () => setLang(lang === 'is' ? 'en' : 'is');
   const routeParams = useParams();
   const [params] = useSearchParams();
   const token = params.get('token') || routeParams?.token || null;
@@ -86,8 +88,8 @@ export default function ConfirmShift({ shifts, setShifts }) {
   function formatWeekPartLabel(raw) {
     const s = String(raw || '').trim().toLowerCase();
     if (!s) return '';
-    if (s === 'weekdays' || s === 'weekday' || s === 'workdays' || s === 'workday' || s === 'work days') return 'Work days';
-    if (s === 'weekend' || s === 'weekends') return 'Weekend';
+    if (s === 'weekdays' || s === 'weekday' || s === 'workdays' || s === 'workday' || s === 'work days') return t('common.workDays');
+    if (s === 'weekend' || s === 'weekends') return t('common.weekend');
     return String(raw).trim();
   }
 
@@ -103,15 +105,15 @@ export default function ConfirmShift({ shifts, setShifts }) {
     return (
       <div style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value)}
+          <button
+            type="button"
+            onClick={toggleLang}
             aria-label={t('lang.label')}
-            style={{ padding: '6px 8px' }}
+            title={t('lang.label')}
+            style={{ padding: '6px 10px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
           >
-            <option value="en">EN</option>
-            <option value="is">ÍS</option>
-          </select>
+            {langToggleLabel}
+          </button>
         </div>
 
         <h3>{t('confirm.invalidLink')}</h3>
@@ -178,15 +180,15 @@ export default function ConfirmShift({ shifts, setShifts }) {
       gap="lg"
     >
       <div style={{ width: '100%', maxWidth: 720, display: 'flex', justifyContent: 'flex-end' }}>
-        <select
-          value={lang}
-          onChange={(e) => setLang(e.target.value)}
+        <button
+          type="button"
+          onClick={toggleLang}
           aria-label={t('lang.label')}
-          style={{ padding: '6px 8px' }}
+          title={t('lang.label')}
+          style={{ padding: '6px 10px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
         >
-          <option value="en">EN</option>
-          <option value="is">ÍS</option>
-        </select>
+          {langToggleLabel}
+        </button>
       </div>
 
       <Text size="xl" fw={600}>

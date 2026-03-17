@@ -4,13 +4,19 @@ import { I18nContext } from './i18nContext.js';
 
 const STORAGE_KEY = 'fleetScheduler.lang';
 
+function normalizeLang(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'is' || raw.startsWith('is-') || raw.startsWith('í')) return 'is';
+  if (raw === 'en' || raw.startsWith('en-')) return 'en';
+  return 'en';
+}
+
 function getInitialLang() {
   const stored = typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) : null;
-  if (stored === 'en' || stored === 'is') return stored;
+  if (stored) return normalizeLang(stored);
 
   const nav = typeof navigator !== 'undefined' ? navigator.language : '';
-  if (String(nav).toLowerCase().startsWith('is')) return 'is';
-  return 'en';
+  return normalizeLang(nav);
 }
 
 function interpolate(template, vars) {
@@ -36,7 +42,7 @@ export function I18nProvider({ children }) {
   const [lang, setLangState] = useState(getInitialLang);
 
   const setLang = useCallback((next) => {
-    const normalized = next === 'is' ? 'is' : 'en';
+    const normalized = normalizeLang(next);
     setLangState(normalized);
     try {
       window.localStorage.setItem(STORAGE_KEY, normalized);
