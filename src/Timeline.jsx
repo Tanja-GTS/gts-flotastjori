@@ -1259,7 +1259,7 @@ export default function Timeline({
           });
           setFormError('');
         }}
-        title={addMode ? "Add new shift" : "Shift details"}
+        title={addMode ? t('timeline.drawer.addNewShiftTitle') : t('timeline.drawer.shiftDetailsTitle')}
         position="right"
         size={520}
         styles={{
@@ -1276,43 +1276,43 @@ export default function Timeline({
             }}
             aria-labelledby="add-shift-heading"
           >
-            <h2 id="add-shift-heading" style={{ fontSize: 22, color: '#222' }}>Add new shift</h2>
+            <h2 id="add-shift-heading" style={{ fontSize: 22, color: '#222' }}>{t('timeline.drawer.addNewShiftTitle')}</h2>
             <p style={{ fontSize: 14, color: '#444' }}>
-              Manual shift outside of patterns
+              {t('timeline.drawer.manualShiftOutsidePatterns')}
             </p>
 
             <Select
-              aria-label="Route"
+              aria-label={t('timeline.drawer.route')}
               data={routeOptions}
               value={newShift.route}
               onChange={(value) => setNewShift(prev => ({ ...prev, route: value || '' }))}
-              placeholder="Route"
+              placeholder={t('timeline.drawer.route')}
               required
             />
 
             <Select
-              aria-label="Shift type"
+              aria-label={t('timeline.drawer.shiftType')}
               data={SHIFT_TYPES_ORDERED.map((t) => ({ value: t, label: SHIFT_TYPE_LABELS[t] }))}
               value={newShift.shiftType}
               onChange={(value) => setNewShift((prev) => ({ ...prev, shiftType: value || 'morning' }))}
-              placeholder="Shift type"
+              placeholder={t('timeline.drawer.shiftType')}
               required
             />
 
             <Select
-              aria-label="Default bus"
+              aria-label={t('timeline.drawer.defaultBus')}
               data={busOptions}
               value={newShift.defaultBus}
               onChange={(value) =>
                 setNewShift(prev => ({ ...prev, defaultBus: value || '' }))
               }
-              placeholder="Default bus"
+              placeholder={t('timeline.drawer.defaultBus')}
               required
             />
 
 
             <TextInput
-              aria-label="Date"
+              aria-label={t('timeline.drawer.date')}
               type="date"
               value={newShift.date}
               onChange={(e) => setNewShift(prev => ({ ...prev, date: e.target.value }))}
@@ -1320,16 +1320,16 @@ export default function Timeline({
             />
 
             <TextInput
-              aria-label="Shift name"
-              placeholder="Shift name"
+              aria-label={t('timeline.drawer.shiftName')}
+              placeholder={t('timeline.drawer.shiftName')}
               value={newShift.name}
               onChange={(e) => setNewShift(prev => ({ ...prev, name: e.target.value }))}
               required
             />
 
             <TextInput
-              aria-label="Start time"
-              placeholder="Start time"
+              aria-label={t('timeline.drawer.startTime')}
+              placeholder={t('timeline.drawer.startTime')}
               type="time"
               value={newShift.startTime}
               onChange={(e) => setNewShift(prev => ({ ...prev, startTime: e.target.value }))}
@@ -1337,8 +1337,8 @@ export default function Timeline({
             />
 
             <TextInput
-              aria-label="End time"
-              placeholder="End time"
+              aria-label={t('timeline.drawer.endTime')}
+              placeholder={t('timeline.drawer.endTime')}
               type="time"
               value={newShift.endTime}
               onChange={(e) => setNewShift(prev => ({ ...prev, endTime: e.target.value }))}
@@ -1360,12 +1360,12 @@ export default function Timeline({
           /* EDIT EXISTING SHIFT */
           selectedShift && (
             <>
-              <p><strong>Route:</strong> {selectedShift.route}</p>
+              <p><strong>{t('timeline.drawer.route')}:</strong> {selectedShift.route}</p>
               {selectedShift.routeName && selectedShift.routeName !== selectedShift.route && (
-                <p><strong>Route name:</strong> {selectedShift.routeName}</p>
+                <p><strong>{t('timeline.drawer.routeName')}:</strong> {selectedShift.routeName}</p>
               )}
               <p>
-                <strong>Shift type:</strong>{' '}
+                <strong>{t('timeline.drawer.shiftType')}:</strong>{' '}
                 {(() => {
                   const normalized = selectedShift ? normalizeShiftType(selectedShift) : '';
                   const base = normalized
@@ -1375,7 +1375,7 @@ export default function Timeline({
                   return normalized === 'evening' && isDinnerShift(selectedShift) ? `${base} shift` : base;
                 })()}
               </p>
-              <p><strong>Time:</strong> {selectedShift.time}</p>
+              <p><strong>{t('timeline.drawer.time')}:</strong> {selectedShift.time}</p>
 
               {(() => {
                 const driverLabel = String(selectedShift.driver || '').trim();
@@ -1397,7 +1397,7 @@ export default function Timeline({
                 return (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <strong>Driver:</strong>
+                      <strong>{t('timeline.drawer.driver')}:</strong>
                       {isUnassigned ? (
                         <>
                           <IconAlertCircle size={16} color="#868e96" />
@@ -1413,8 +1413,8 @@ export default function Timeline({
                       ) : (
                         <div style={{ marginTop: 4, fontSize: 13, color: '#868e96' }}>
                           {driverOpt
-                            ? 'No phone number in Drivers list.'
-                            : 'Driver not found in Drivers list (no phone available).'}
+                            ? t('timeline.drawer.noPhoneInDriversList')
+                            : t('timeline.drawer.driverNotFoundNoPhone')}
                         </div>
                       )
                     ) : null}
@@ -1423,7 +1423,7 @@ export default function Timeline({
               })()}
 
 <div style={{ marginBottom: 12 }}>
-  <strong style={{ fontSize: 13 }}>Buses used</strong>
+  <strong style={{ fontSize: 13 }}>{t('timeline.drawer.busesUsed')}</strong>
   <div style={{ fontSize: 13, color: '#333', marginTop: 4 }}>
     {busesUsed.length === 0 ? (
       <span style={{ color: '#777' }}>{t('timeline.noBusAssigned')}</span>
@@ -1439,11 +1439,11 @@ export default function Timeline({
 
               <div style={{ marginBottom: 12 }}>
                 <Select
-                  aria-label="Assign driver"
+                  aria-label={t('timeline.drawer.assignDriver')}
                   data={driverSelectOptions.length ? driverSelectOptions : fallbackDrivers}
                   value={editedDriverId}
                   onChange={setEditedDriverId}
-                  placeholder="Assign driver"
+                  placeholder={t('timeline.drawer.assignDriver')}
                   clearable={false}
                   size="lg"
                   renderOption={({ option, checked }) => {
@@ -1495,7 +1495,7 @@ export default function Timeline({
 
                 <Checkbox
                   style={{ marginTop: 10 }}
-                  label="Assign only this shift"
+                  label={t('timeline.drawer.assignOnlyThisShift')}
                   checked={assignOnlyThisShift}
                   onChange={(e) => setAssignOnlyThisShift(e.currentTarget.checked)}
                 />
@@ -1506,14 +1506,14 @@ export default function Timeline({
                     disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
                     onClick={() => setAssignReviewOpened(true)}
                   >
-                    Assign…
+                    {t('timeline.drawer.assignButton')}
                   </Button>
                 </div>
 
                 <Modal
                   opened={assignReviewOpened}
                   onClose={() => setAssignReviewOpened(false)}
-                  title="Review assignment"
+                  title={t('timeline.drawer.reviewAssignmentTitle')}
                   centered
                 >
                   {(() => {
@@ -1551,7 +1551,7 @@ export default function Timeline({
                       return `${datePart} (${dowShort(start)}–${dowShort(end)})`;
                     };
 
-                    let scopeText = assignOnlyThisShift ? 'This shift only' : 'Whole week';
+                    let scopeText = assignOnlyThisShift ? t('timeline.drawer.thisShiftOnly') : t('timeline.drawer.wholeWeek');
                     if (selectedDate && !Number.isNaN(selectedDate.getTime())) {
                       if (assignOnlyThisShift) {
                         scopeText = `${day2(selectedDate)} ${monthLong2(selectedDate)} (${dowShort(selectedDate)})`;
@@ -1571,14 +1571,14 @@ export default function Timeline({
                       <div style={{ display: 'grid', gap: 12 }}>
                         <div style={{ fontSize: 13, color: '#33363E', lineHeight: 1.35 }}>
                           <div>
-                            <strong>Driver:</strong> {displayName || '—'}
+                            <strong>{t('timeline.drawer.driver')}:</strong> {displayName || '—'}
                           </div>
                           <div>
-                            <strong>Shift:</strong> {shiftLabel || '—'}
+                            <strong>{t('timeline.drawer.shift')}:</strong> {shiftLabel || '—'}
                             {shiftTime ? `; ${shiftTime}` : ''}
                           </div>
                           <div>
-                            <strong>Scope:</strong> {scopeText}
+                            <strong>{t('timeline.drawer.scope')}:</strong> {scopeText}
                           </div>
                         </div>
 
@@ -1589,14 +1589,14 @@ export default function Timeline({
                             disabled={isAssigning || isUnassign}
                             onClick={() => runAssignment({ withEmail: true })}
                           >
-                            Send request
+                            {t('timeline.drawer.sendRequest')}
                           </Button>
                           <Button
                             loading={isAssigning && assigningMode === 'assign'}
                             disabled={isAssigning}
                             onClick={() => runAssignment({ withEmail: false })}
                           >
-                            {isUnassign ? 'Unassign' : 'Assign now'}
+                            {isUnassign ? t('timeline.drawer.unassign') : t('timeline.drawer.assignNow')}
                           </Button>
                         </div>
                       </div>
@@ -1605,14 +1605,14 @@ export default function Timeline({
                 </Modal>
 
                 <div style={{ marginTop: 12, fontSize: 12, color: '#33363E' }}>
-                  Default is to assign the driver for the whole week (same route + shift type).
+                  {t('timeline.drawer.assignmentHelpLine1')}
                   <br />
-                  Tick the checkbox if you only want to assign this specific shift.
+                  {t('timeline.drawer.assignmentHelpLine2')}
                 </div>
 
                 {selectedShift?.manual && (
                   <div style={{ marginTop: 8, fontSize: 13, color: '#777' }}>
-                    Manual shifts can’t be assigned/emailed because they aren’t saved to SharePoint.
+                    {t('timeline.drawer.manualCannotAssign')}
                   </div>
                 )}
 

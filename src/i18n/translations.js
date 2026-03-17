@@ -41,6 +41,44 @@ export const translations = {
       previousWeek: 'Previous week',
       nextWeek: 'Next week',
       goToCurrentWeek: 'Go to current week',
+      drawer: {
+        shiftDetailsTitle: 'Shift details',
+        addNewShiftTitle: 'Add new shift',
+        manualShiftOutsidePatterns: 'Manual shift outside of patterns',
+
+        route: 'Route',
+        routeName: 'Route name',
+        shiftType: 'Shift type',
+        time: 'Time',
+        driver: 'Driver',
+        scope: 'Scope',
+        shift: 'Shift',
+
+        defaultBus: 'Default bus',
+        date: 'Date',
+        shiftName: 'Shift name',
+        startTime: 'Start time',
+        endTime: 'End time',
+
+        busesUsed: 'Buses used',
+        assignDriver: 'Assign driver',
+        assignOnlyThisShift: 'Assign only this shift',
+        assignButton: 'Assign…',
+        reviewAssignmentTitle: 'Review assignment',
+
+        wholeWeek: 'Whole week',
+        thisShiftOnly: 'This shift only',
+        sendRequest: 'Send request',
+        unassign: 'Unassign',
+        assignNow: 'Assign now',
+
+        assignmentHelpLine1: 'Default is to assign the driver for the whole week (same route + shift type).',
+        assignmentHelpLine2: 'Tick the checkbox if you only want to assign this specific shift.',
+        manualCannotAssign: "Manual shifts can’t be assigned/emailed because they aren’t saved to SharePoint.",
+
+        noPhoneInDriversList: 'No phone number in Drivers list.',
+        driverNotFoundNoPhone: 'Driver not found in Drivers list (no phone available).',
+      },
     },
     printDay: {
       titleHint: 'Daily driving overview',
@@ -174,6 +212,44 @@ export const translations = {
     previousWeek: 'Fyrri vika',
     nextWeek: 'Næsta vika',
     goToCurrentWeek: 'Fara í núverandi viku',
+    drawer: {
+      shiftDetailsTitle: 'Upplýsingar um vakt',
+      addNewShiftTitle: 'Bæta við nýrri vakt',
+      manualShiftOutsidePatterns: 'Handvirk vakt utan sniðmáta',
+
+      route: 'Leið',
+      routeName: 'Heiti leiðar',
+      shiftType: 'Tegund vaktar',
+      time: 'Tími',
+      driver: 'Bílstjóri',
+      scope: 'Gildissvið',
+      shift: 'Vakt',
+
+      defaultBus: 'Sjálfgefinn bíll',
+      date: 'Dagsetning',
+      shiftName: 'Heiti vaktar',
+      startTime: 'Upphafstími',
+      endTime: 'Loktími',
+
+      busesUsed: 'Notaðir bílar',
+      assignDriver: 'Úthluta bílstjóra',
+      assignOnlyThisShift: 'Úthluta aðeins þessari vakt',
+      assignButton: 'Úthluta…',
+      reviewAssignmentTitle: 'Yfirfara úthlutun',
+
+      wholeWeek: 'Öll vikan',
+      thisShiftOnly: 'Aðeins þessi vakt',
+      sendRequest: 'Senda beiðni',
+      unassign: 'Taka af úthlutun',
+      assignNow: 'Úthluta núna',
+
+      assignmentHelpLine1: 'Sjálfgefið er að úthluta bílstjóra fyrir alla vikuna (sama leið + tegund vaktar).',
+      assignmentHelpLine2: 'Merktu við ef þú vilt aðeins úthluta þessari tilteknu vakt.',
+      manualCannotAssign: 'Handvirkar vaktir er ekki hægt að úthluta/senda tölvupóst því þær eru ekki vistaðar í SharePoint.',
+
+      noPhoneInDriversList: 'Ekkert símanúmer í bílstjóralista.',
+      driverNotFoundNoPhone: 'Bílstjóri fannst ekki í bílstjóralista (ekkert símanúmer).',
+    },
   },
 
   printDay: {
