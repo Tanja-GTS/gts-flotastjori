@@ -5,6 +5,7 @@ import ConfirmShift from './ConfirmShift';
 import ErrorBoundary from './ErrorBoundary';
 import { WORKSPACES } from './workspaces';
 import PrintDay from './PrintDay';
+import Drivers from './Drivers';
 import { fetchBuses, fetchDrivers, fetchShifts, fetchWorkspaces, generateShifts } from './data/backendApi';
 import { useI18n } from './i18n';
 
@@ -442,6 +443,7 @@ export default function App() {
             />
           }
         />
+        <Route path="/drivers" element={<Drivers driverOptions={driverOptions} />} />
         <Route
           path="/confirm-shift"
           element={

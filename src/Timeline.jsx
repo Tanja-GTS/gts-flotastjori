@@ -757,7 +757,16 @@ export default function Timeline({
             <div className="appHeader__separator" aria-hidden="true" />
           </div>
 
-          <div className="appHeader__spacer" aria-hidden="true" />
+          <div className="appHeader__spacer">
+            <button
+              className="appHeader__navLink"
+              type="button"
+              onClick={() => navigate('/drivers')}
+              aria-label={t('nav.drivers')}
+            >
+              {t('nav.drivers')}
+            </button>
+          </div>
 
           <div className="appHeader__right">
             <div className="appHeader__separator" aria-hidden="true" />

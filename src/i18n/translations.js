@@ -5,6 +5,9 @@ export const translations = {
       en: 'English',
       is: 'Icelandic',
     },
+    nav: {
+      drivers: 'Drivers',
+    },
     common: {
       workspace: 'Workspace',
       selectWorkspace: 'Select workspace',
@@ -131,6 +134,20 @@ export const translations = {
       somethingWentWrong: 'Something went wrong.',
     },
 
+    drivers: {
+      breadcrumbs: {
+        label: 'Breadcrumbs',
+        home: 'Home',
+        drivers: 'Drivers',
+      },
+      title: 'Drivers information',
+      table: {
+        name: 'Name',
+        phone: 'Phone',
+        email: 'Email',
+      },
+    },
+
     date: {
       weekdays: {
         mon: 'Monday',
@@ -187,6 +204,10 @@ export const translations = {
     label: 'Tungumál',
     en: 'Enska',
     is: 'Íslenska',
+  },
+
+  nav: {
+    drivers: 'Bílstjórar',
   },
 
   common: {
@@ -317,6 +338,20 @@ export const translations = {
     failedGenerateShifts: 'Mistókst að búa til vaktir',
     failedLoadShift: 'Mistókst að hlaða vakt',
     somethingWentWrong: 'Eitthvað fór úrskeiðis.',
+  },
+
+  drivers: {
+    breadcrumbs: {
+      label: 'Brauðmolar',
+      home: 'Heim',
+      drivers: 'Bílstjórar',
+    },
+    title: 'Upplýsingar um bílstjóra',
+    table: {
+      name: 'Nafn',
+      phone: 'Sími',
+      email: 'Netfang',
+    },
   },
 
   date: {

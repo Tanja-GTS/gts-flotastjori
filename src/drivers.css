@@ -1,0 +1,41 @@
+.driversPage {
+  padding: 24px 40px;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.driversBreadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.driversBreadcrumbs__link {
+  color: #1971c2;
+  text-decoration: none;
+}
+
+.driversBreadcrumbs__link:hover {
+  text-decoration: underline;
+}
+
+.driversBreadcrumbs__sep {
+  color: #888;
+}
+
+.driversBreadcrumbs__current {
+  color: #151922;
+  font-weight: 600;
+}
+
+.driversTitle {
+  margin: 0 0 16px 0;
+  color: #151922;
+  font-weight: 600;
+}
+
+.driversTableWrap {
+  max-width: 980px;
+}
