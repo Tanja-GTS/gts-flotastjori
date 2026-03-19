@@ -107,13 +107,15 @@
   color: #151922;
   cursor: pointer;
   font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   line-height: normal;
+  text-decoration: underline;
+  transition: color 120ms ease;
 }
 
 .appHeader__navLink:hover {
-  text-decoration: underline;
+  color: #42454C;
 }
 
 .appHeader__navLink:focus-visible {
@@ -1373,6 +1375,7 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .shift-status {
