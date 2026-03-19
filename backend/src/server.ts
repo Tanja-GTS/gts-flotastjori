@@ -91,6 +91,16 @@ const isRender = Boolean(process.env.RENDER) || Boolean(process.env.RENDER_EXTER
 const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
 const serveFrontend = serveFrontendEnv === 'true' || ((isRender || isProd) && serveFrontendEnv !== 'false');
 
+process.on('unhandledRejection', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('Unhandled promise rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('Uncaught exception:', err);
+});
+
 function pickDistPath(): string | null {
   return pickDist()?.distPath ?? null;
 }
@@ -108,10 +118,23 @@ if (serveFrontend) {
   }
 }
 
-const port = Number(process.env.PORT || 4000);
-app.listen(port, () => {
+const portRaw = String(process.env.PORT || '').trim();
+const port = Number.parseInt(portRaw, 10) || 4000;
+const host = String(process.env.HOST || '').trim() || '0.0.0.0';
+
+// eslint-disable-next-line no-console
+console.log(`Starting backend (render=${isRender}, prod=${isProd}, serveFrontend=${serveFrontend})`);
+// eslint-disable-next-line no-console
+console.log(`Binding HTTP server on ${host}:${port} (PORT=${portRaw || '<unset>'})`);
+
+const server = app.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`Backend listening on http://localhost:${port}`);
+  console.log(`Backend listening on http://${host}:${port}`);
   // eslint-disable-next-line no-console
   if (serveFrontend) console.log('Serving frontend (dist auto-detected)');
+});
+
+server.on('error', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('Server listen error:', err);
 });
