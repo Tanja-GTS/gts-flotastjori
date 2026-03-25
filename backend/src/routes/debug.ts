@@ -7,6 +7,7 @@ import { getListFieldsById, getSiteLists } from '../controllers/debugSiteControl
 import { getStopsTemplateDebug } from '../controllers/debugStopsTemplateController';
 import { getStopsTemplateBreakRows } from '../controllers/debugStopsTemplateBreaksController';
 import { getEnvDebug } from '../controllers/debugEnvController';
+import { getShiftGenerationPreview } from '../controllers/debugGenerationController';
 import { getSearchPatterns } from '../controllers/debugPatternsSearchController';
 
 export const debugRouter = Router();
@@ -53,6 +54,11 @@ debugRouter.post('/instances/:id/confirmation', postPatchConfirmationStatus);
 
 // Search the ShiftPatterns list for debugging (ex: q=olfus)
 debugRouter.get('/search-patterns', getSearchPatterns);
+
+// Preview whether workspace/month patterns are invalid, skipped, covered, or ready to generate.
+// Example:
+//   GET /api/debug/shift-generation-preview?workspaceId=south&month=2026-03
+debugRouter.get('/shift-generation-preview', getShiftGenerationPreview);
 
 // Add the new debugEnvController endpoint to the debug router
 debugRouter.get('/list-fields-any', getEnvDebug);

@@ -4,7 +4,6 @@ import {
   getGraphConfig,
   getListIds,
   getShiftInstancesFieldNames,
-  getShiftPatternsFieldNames,
 } from './msListsConfig';
 import { listShiftPatterns, type ShiftPatternDto } from './shiftPatternsService';
 import { listWorkspaces } from './workspacesService';
@@ -696,75 +695,145 @@ async function runWithConcurrency<T>(params: {
   await Promise.all(runners);
 }
 
-export async function generateShiftInstances(params: {
+function formatPatternLabel(pattern: ShiftPatternDto): string {
+  const label = String(pattern.routeName || pattern.route || pattern.id || '').trim();
+  return label ? `#${pattern.id} “${label}”` : `#${pattern.id}`;
+}
+
+function getPatternMissingFields(pattern: ShiftPatternDto): string[] {
+  const missing: string[] = [];
+  const hasDay = Array.isArray(pattern.dayOfWeek) ? pattern.dayOfWeek.length > 0 : Boolean(pattern.dayOfWeek);
+  if (!String(pattern.route || '').trim()) missing.push('route');
+  if (!String(pattern.shiftType || '').trim()) missing.push('shiftType');
+  if (!hasDay) missing.push('dayOfWeek');
+  if (!String(pattern.startTime || '').trim()) missing.push('startTime');
+  if (!String(pattern.endTime || '').trim()) missing.push('endTime');
+  return missing;
+}
+
+function buildInvalidPatternSummary(workspaceId: string, patterns: ShiftPatternDto[]): string {
+  const lines = patterns
+    .slice(0, 10)
+    .map((p) => `${formatPatternLabel(p)} missing: ${getPatternMissingFields(p).join(', ')}`);
+  const more = patterns.length > 10 ? ` (+${patterns.length - 10} more)` : '';
+  return (
+    `ShiftPatterns for workspace “${workspaceId}” are incomplete. Fix these fields in the ShiftPatterns list, then Generate again:\n` +
+    lines.join('\n') +
+    more
+  );
+}
+
+async function loadPatternsForGeneration(params: {
   workspaceId: string;
-  month: string; // YYYY-MM
-}): Promise<{ created: number; skipped: number }>{
-  const { workspaceId, month } = params;
+  strict: boolean;
+}): Promise<{ patterns: ShiftPatternDto[]; warnings: string[] }> {
+  const patternsAll = await listShiftPatterns({ workspaceId: params.workspaceId, includeInvalid: true });
+  const warnings: string[] = [];
+
+  if (patternsAll.length === 0) {
+    const message =
+      `No ShiftPatterns found for workspace “${params.workspaceId}”. ` +
+      `Add rows to the ShiftPatterns list with workspaceId=${params.workspaceId}, then try again.`;
+    if (params.strict) throw new Error(message);
+    return { patterns: [], warnings: [message] };
+  }
+
+  const hasAnyWorkspaceTag = patternsAll.some((p) => String((p as any).workspaceId || '').trim());
+  if (!hasAnyWorkspaceTag) {
+    const message =
+      `ShiftPatterns do not appear to have a usable workspaceId field. ` +
+      `Refusing to generate for workspace “${params.workspaceId}” because it would mix patterns across workspaces. ` +
+      `Fix by adding a workspaceId column to ShiftPatterns (Text or Lookup), ` +
+      `or set PATTERN_FIELD_WORKSPACE_ID to your column’s internal name.`;
+    if (params.strict) throw new Error(message);
+    return { patterns: [], warnings: [message] };
+  }
+
+  const invalid = patternsAll.filter((pattern) => getPatternMissingFields(pattern).length > 0);
+  if (invalid.length > 0) {
+    const message = buildInvalidPatternSummary(params.workspaceId, invalid);
+    if (params.strict) throw new Error(message);
+    warnings.push(message);
+  }
+
+  return {
+    patterns: patternsAll.filter((pattern) => getPatternMissingFields(pattern).length === 0),
+    warnings,
+  };
+}
+
+type PreparedPatternForGeneration = {
+  pattern: ShiftPatternDto;
+  dows: number[];
+  templateLookupId?: number;
+  busLookupIdToWrite: number;
+};
+
+async function preparePatternForGeneration(params: {
+  pattern: ShiftPatternDto;
+  defaultBusLookupId: number;
+  strict: boolean;
+  warnings: string[];
+}): Promise<PreparedPatternForGeneration | null> {
+  const { pattern, defaultBusLookupId, strict, warnings } = params;
+  const dows = normalizeDows(pattern.dayOfWeek);
+  if (dows.length === 0) return null;
+
+  const templateId = String(pattern.templateId || '').trim();
+  let busLookupIdToWrite: number | undefined;
+
+  if (templateId) {
+    try {
+      const defaults = await getTemplateDefaults(templateId);
+      if (defaults.busLookupId != null) busLookupIdToWrite = defaults.busLookupId;
+    } catch (err) {
+      if (strict) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      warnings.push(`Skipping ${formatPatternLabel(pattern)}: failed to read template ${templateId} (${message}).`);
+      return null;
+    }
+  }
+
+  if (busLookupIdToWrite == null) {
+    if (Number.isFinite(defaultBusLookupId)) {
+      busLookupIdToWrite = defaultBusLookupId;
+    } else {
+      const message =
+        'ShiftInstances column busId is required. Set the DEFAULT_BUS_LOOKUP_ID environment variable ' +
+        '(e.g. in Render → Service → Environment), or ensure the template has BusLookupId.';
+      if (strict) throw new Error(message);
+      warnings.push(`Skipping ${formatPatternLabel(pattern)}: ${message}`);
+      return null;
+    }
+  }
+
+  return {
+    pattern,
+    dows,
+    templateLookupId: templateId ? Number(templateId) : undefined,
+    busLookupIdToWrite,
+  };
+}
+
+async function createMissingShiftInstances(params: {
+  workspaceId: string;
+  month: string;
+  strict: boolean;
+}): Promise<{ created: number; skipped: number; warnings: string[] }> {
+  const { workspaceId, month, strict } = params;
 
   const graph = getGraphConfig();
   const lists = getListIds();
   const token = await getGraphAppToken(graph);
-
   const fInst = getShiftInstancesFieldNames();
-  const fPat = getShiftPatternsFieldNames();
 
   const workspaceCol = await getWorkspaceColumnInfo();
   const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
+  const { patterns, warnings } = await loadPatternsForGeneration({ workspaceId, strict });
 
-  const patternsAll = await listShiftPatterns({ workspaceId, includeInvalid: true });
-  if (patternsAll.length === 0) {
-    throw new Error(
-      `No ShiftPatterns found for workspace “${workspaceId}”. Add rows to the ShiftPatterns list with workspaceId=${workspaceId}, then try Generate again.`
-    );
-  }
+  if (patterns.length === 0) return { created: 0, skipped: 0, warnings };
 
-  // Safety: if patterns aren't workspace-tagged, workspace-scoped generation can mix workspaces.
-  // Fail loudly with actionable guidance.
-  const hasAnyWorkspaceTag = patternsAll.some((p) => String((p as any).workspaceId || '').trim());
-  if (!hasAnyWorkspaceTag) {
-    throw new Error(
-      `ShiftPatterns do not appear to have a usable workspaceId field. ` +
-        `Refusing to generate for workspace “${workspaceId}” because it would mix patterns across workspaces. ` +
-        `Fix by adding a workspaceId column to ShiftPatterns (Text or Lookup), ` +
-        `or set PATTERN_FIELD_WORKSPACE_ID to your column’s internal name.`
-    );
-  }
-
-  const missingFor = (p: ShiftPatternDto): string[] => {
-    const missing: string[] = [];
-    const hasDay = Array.isArray(p.dayOfWeek) ? p.dayOfWeek.length > 0 : Boolean(p.dayOfWeek);
-    if (!String(p.route || '').trim()) missing.push('route');
-    if (!String(p.shiftType || '').trim()) missing.push('shiftType');
-    if (!hasDay) missing.push('dayOfWeek');
-    if (!String(p.startTime || '').trim()) missing.push('startTime');
-    if (!String(p.endTime || '').trim()) missing.push('endTime');
-    return missing;
-  };
-
-  const invalid = patternsAll
-    .map((p) => ({ p, missing: missingFor(p) }))
-    .filter((x) => x.missing.length > 0);
-
-  if (invalid.length > 0) {
-    const lines = invalid
-      .slice(0, 10)
-      .map(({ p, missing }) => {
-        const label = String(p.routeName || p.route || p.id || '').trim();
-        return `#${p.id} “${label}” missing: ${missing.join(', ')}`;
-      });
-    const more = invalid.length > 10 ? ` (+${invalid.length - 10} more)` : '';
-    throw new Error(
-      `ShiftPatterns for workspace “${workspaceId}” are incomplete. Fix these fields in the ShiftPatterns list, then Generate again:\n` +
-        lines.join('\n') +
-        more
-    );
-  }
-
-  const patterns = patternsAll;
   const existing = await listShiftInstances({ workspaceId, month });
-
-  // Existing key: `${date}|${patternId}`
   const existingKeys = new Set(
     existing
       .map((s) => `${s.date}|${s.patternId || ''}`)
@@ -772,48 +841,49 @@ export async function generateShiftInstances(params: {
   );
 
   const dates = daysInMonth(month);
-
-  // In your ShiftInstances list, `busId` is required. Prefer getting it from the template.
-  // Fallback to DEFAULT_BUS_LOOKUP_ID if template doesn't have one.
   const defaultBusLookupIdRaw = optionalEnv('DEFAULT_BUS_LOOKUP_ID', '').trim();
   const defaultBusLookupId = defaultBusLookupIdRaw ? Number(defaultBusLookupIdRaw) : NaN;
-
   const concurrency = Math.max(
     1,
     Math.min(20, Number(optionalEnv('GENERATE_CONCURRENCY', '6')) || 6)
   );
-
   const createUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
     graph.siteId
   )}/lists/${encodeURIComponent(lists.shiftInstancesListId)}/items`;
 
-  const toCreate: Array<{ key: string; fields: Record<string, unknown> }> = [];
+  const preparedPatterns = (
+    await Promise.all(
+      patterns.map((pattern) =>
+        preparePatternForGeneration({
+          pattern,
+          defaultBusLookupId,
+          strict,
+          warnings,
+        })
+      )
+    )
+  ).filter((value): value is PreparedPatternForGeneration => Boolean(value));
 
+  const toCreate: Array<{ key: string; patternLabel: string; fields: Record<string, unknown> }> = [];
   let created = 0;
   let skipped = 0;
 
-  for (const pattern of patterns) {
-    const dows = normalizeDows(pattern.dayOfWeek);
-    if (dows.length === 0) continue;
-
+  for (const prepared of preparedPatterns) {
     for (const date of dates) {
       const dateObj = new Date(`${date}T00:00:00`);
-      if (!dows.includes(dateObj.getDay())) continue;
+      if (!prepared.dows.includes(dateObj.getDay())) continue;
 
-      const key = `${date}|${pattern.id}`;
+      const key = `${date}|${prepared.pattern.id}`;
       if (existingKeys.has(key)) {
         skipped += 1;
         continue;
       }
 
-      // NOTE: Lookup fields usually require "<InternalName>LookupId" when writing.
-      // We support both:
       const patternLookupKey = `${fInst.patternId}LookupId`;
       const templateLookupKey = `${fInst.templateId}LookupId`;
       const busLookupKey = `${fInst.busId}LookupId`;
 
       const fields: Record<string, unknown> = {
-        // Graph dateTime columns expect an ISO date-time.
         [fInst.date]: `${date}T00:00:00Z`,
         [fInst.generated]: true,
         [fInst.manualOverride]: false,
@@ -822,46 +892,24 @@ export async function generateShiftInstances(params: {
       if (workspaceCol.kind === 'lookup') {
         const spId = workspaceMaps?.spItemIdBySlug.get(String(workspaceId).trim());
         if (!spId) {
-          throw new Error(
-            `Workspace “${workspaceId}” is not present in the Workspaces list, but ShiftInstances.workspace is configured as a Lookup. Add the workspace to the Workspaces list (Title = slug), or switch the ShiftInstances workspace column back to Text/Choice.`
-          );
+          const message =
+            `Workspace “${workspaceId}” is not present in the Workspaces list, but ShiftInstances.workspace is configured as a Lookup. ` +
+            `Add the workspace to the Workspaces list (Title = slug), or switch the ShiftInstances workspace column back to Text/Choice.`;
+          if (strict) throw new Error(message);
+          warnings.push(message);
+          return { created, skipped, warnings };
         }
         fields[`${fInst.workspaceId}LookupId`] = Number(spId);
       } else {
         fields[fInst.workspaceId] = workspaceId;
       }
 
-      // Set pattern lookup
-      fields[patternLookupKey] = Number(pattern.id);
+      fields[patternLookupKey] = Number(prepared.pattern.id);
+      if (prepared.templateLookupId != null) fields[templateLookupKey] = prepared.templateLookupId;
+      fields[busLookupKey] = prepared.busLookupIdToWrite;
 
-      // templateId is required in your list; we attempt to copy from the pattern.
-      const templateId = (pattern as ShiftPatternDto).templateId;
-      if (templateId) {
-        fields[templateLookupKey] = Number(templateId);
-      }
-
-      // busId is required.
-      let busLookupIdToWrite: number | undefined;
-
-      if (templateId) {
-        const defaults = await getTemplateDefaults(templateId);
-        if (defaults.busLookupId != null) busLookupIdToWrite = defaults.busLookupId;
-      }
-
-      if (busLookupIdToWrite == null) {
-        if (!Number.isFinite(defaultBusLookupId)) {
-          throw new Error(
-            'ShiftInstances column busId is required. Set the DEFAULT_BUS_LOOKUP_ID environment variable (e.g. in Render → Service → Environment), or ensure the template has BusLookupId.'
-          );
-        }
-        busLookupIdToWrite = defaultBusLookupId;
-      }
-
-      fields[busLookupKey] = busLookupIdToWrite;
-
-      // Mark as existing immediately so we don't queue duplicates in-process.
       existingKeys.add(key);
-      toCreate.push({ key, fields });
+      toCreate.push({ key, patternLabel: formatPatternLabel(prepared.pattern), fields });
     }
   }
 
@@ -869,12 +917,205 @@ export async function generateShiftInstances(params: {
     items: toCreate,
     concurrency,
     worker: async (item) => {
-      await graphPost(createUrl, token, { fields: item.fields });
-      created += 1;
+      try {
+        await graphPost(createUrl, token, { fields: item.fields });
+        created += 1;
+      } catch (err) {
+        if (strict) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Failed to create ${item.patternLabel} for ${item.key}: ${message}`);
+      }
     },
   });
 
-  return { created, skipped };
+  return { created, skipped, warnings };
+}
+
+export async function generateShiftInstances(params: {
+  workspaceId: string;
+  month: string; // YYYY-MM
+}): Promise<{ created: number; skipped: number }>{
+  const result = await createMissingShiftInstances({
+    workspaceId: params.workspaceId,
+    month: params.month,
+    strict: true,
+  });
+  return { created: result.created, skipped: result.skipped };
+}
+
+export async function ensureShiftInstancesForMonth(params: {
+  workspaceId: string;
+  month: string;
+}): Promise<{ created: number; skipped: number; warnings: string[] }> {
+  return createMissingShiftInstances({
+    workspaceId: params.workspaceId,
+    month: params.month,
+    strict: false,
+  });
+}
+
+export type ShiftGenerationPreviewPattern = {
+  id: string;
+  label: string;
+  route?: string;
+  shiftType?: string;
+  templateId?: string;
+  status: 'invalid' | 'skipped' | 'covered' | 'ready';
+  missingFields?: string[];
+  reason?: string;
+  matchingDates: number;
+  existingDates: number;
+  missingDates: number;
+};
+
+export type ShiftGenerationPreview = {
+  workspaceId: string;
+  month: string;
+  patternCount: number;
+  validPatternCount: number;
+  invalidPatternCount: number;
+  existingInstanceCount: number;
+  wouldCreateCount: number;
+  alreadyCoveredCount: number;
+  warnings: string[];
+  patterns: ShiftGenerationPreviewPattern[];
+};
+
+export async function previewShiftGeneration(params: {
+  workspaceId: string;
+  month: string;
+}): Promise<ShiftGenerationPreview> {
+  const { workspaceId, month } = params;
+  const warnings: string[] = [];
+  const patternsAll = await listShiftPatterns({ workspaceId, includeInvalid: true });
+  const existing = await listShiftInstances({ workspaceId, month });
+  const existingKeys = new Set(
+    existing
+      .map((s) => `${s.date}|${s.patternId || ''}`)
+      .filter((k) => !k.endsWith('|'))
+  );
+  const dates = daysInMonth(month);
+  const defaultBusLookupIdRaw = optionalEnv('DEFAULT_BUS_LOOKUP_ID', '').trim();
+  const defaultBusLookupId = defaultBusLookupIdRaw ? Number(defaultBusLookupIdRaw) : NaN;
+
+  if (patternsAll.length === 0) {
+    warnings.push(
+      `No ShiftPatterns found for workspace “${workspaceId}”. Add rows to the ShiftPatterns list with workspaceId=${workspaceId}.`
+    );
+  }
+
+  const hasAnyWorkspaceTag = patternsAll.some((p) => String((p as any).workspaceId || '').trim());
+  if (patternsAll.length > 0 && !hasAnyWorkspaceTag) {
+    warnings.push(
+      `ShiftPatterns do not appear to have a usable workspaceId field. ` +
+        `Fix by adding a workspaceId column to ShiftPatterns (Text or Lookup), ` +
+        `or set PATTERN_FIELD_WORKSPACE_ID to your column’s internal name.`
+    );
+  }
+
+  const patterns: ShiftGenerationPreviewPattern[] = [];
+  let validPatternCount = 0;
+  let invalidPatternCount = 0;
+  let wouldCreateCount = 0;
+  let alreadyCoveredCount = 0;
+
+  for (const pattern of patternsAll) {
+    const missingFields = getPatternMissingFields(pattern);
+    const label = formatPatternLabel(pattern);
+    const base = {
+      id: pattern.id,
+      label,
+      route: pattern.route || undefined,
+      shiftType: String(pattern.shiftType || '').trim() || undefined,
+      templateId: String(pattern.templateId || '').trim() || undefined,
+    };
+
+    if (missingFields.length > 0) {
+      invalidPatternCount += 1;
+      patterns.push({
+        ...base,
+        status: 'invalid',
+        missingFields,
+        matchingDates: 0,
+        existingDates: 0,
+        missingDates: 0,
+      });
+      continue;
+    }
+
+    validPatternCount += 1;
+    const dows = normalizeDows(pattern.dayOfWeek);
+    const matchingDates = dates.filter((date) => {
+      const dateObj = new Date(`${date}T00:00:00`);
+      return dows.includes(dateObj.getDay());
+    });
+
+    const existingDates = matchingDates.filter((date) => existingKeys.has(`${date}|${pattern.id}`));
+    const missingDates = matchingDates.filter((date) => !existingKeys.has(`${date}|${pattern.id}`));
+
+    const templateId = String(pattern.templateId || '').trim();
+    let hasBusSource = Number.isFinite(defaultBusLookupId);
+    let skipReason = '';
+
+    if (templateId) {
+      try {
+        const defaults = await getTemplateDefaults(templateId);
+        if (defaults.busLookupId != null) hasBusSource = true;
+      } catch (err) {
+        skipReason = `failed to read template ${templateId}: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+
+    if (!skipReason && !hasBusSource) {
+      skipReason =
+        'missing bus source: set DEFAULT_BUS_LOOKUP_ID or ensure the template exposes BusLookupId';
+    }
+
+    if (skipReason) {
+      patterns.push({
+        ...base,
+        status: 'skipped',
+        reason: skipReason,
+        matchingDates: matchingDates.length,
+        existingDates: existingDates.length,
+        missingDates: missingDates.length,
+      });
+      continue;
+    }
+
+    if (missingDates.length > 0) {
+      wouldCreateCount += missingDates.length;
+      patterns.push({
+        ...base,
+        status: 'ready',
+        matchingDates: matchingDates.length,
+        existingDates: existingDates.length,
+        missingDates: missingDates.length,
+      });
+    } else {
+      alreadyCoveredCount += existingDates.length;
+      patterns.push({
+        ...base,
+        status: 'covered',
+        matchingDates: matchingDates.length,
+        existingDates: existingDates.length,
+        missingDates: 0,
+      });
+    }
+  }
+
+  return {
+    workspaceId,
+    month,
+    patternCount: patternsAll.length,
+    validPatternCount,
+    invalidPatternCount,
+    existingInstanceCount: existing.length,
+    wouldCreateCount,
+    alreadyCoveredCount,
+    warnings,
+    patterns,
+  };
 }
 
 export async function listHydratedShifts(params: {

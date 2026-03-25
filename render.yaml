@@ -92,6 +92,10 @@ services:
       - key: LIST_FIELD_MANUAL_OVERRIDE
         sync: false
 
+      # Automatically materialize missing ShiftInstances when a month is opened.
+      - key: AUTO_GENERATE_SHIFTS_ON_READ
+        value: "true"
+
       # Optional: email sender UPN (only needed if using Graph sendMail)
       - key: MAIL_SENDER_UPN
         sync: false

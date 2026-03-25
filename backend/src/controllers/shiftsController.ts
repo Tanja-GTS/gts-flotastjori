@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express';
-import { listHydratedShifts } from '../services/shiftInstancesService';
-import { cacheGetOrSet } from '../services/simpleCache';
+import { ensureShiftInstancesForMonth, listHydratedShifts } from '../services/shiftInstancesService';
+import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
 
 const SHIFTS_TTL_MS = Number(process.env.CACHE_SHIFTS_TTL_MS || 15000);
+const AUTO_GENERATE_ON_READ = !['false', '0', 'no', 'off'].includes(
+  String(process.env.AUTO_GENERATE_SHIFTS_ON_READ || 'true').trim().toLowerCase()
+);
 
 export async function getShifts(req: Request, res: Response) {
   try {
@@ -18,6 +21,16 @@ export async function getShifts(req: Request, res: Response) {
     }
 
     const cacheKey = `shifts|${workspaceId || 'all'}|${month || 'all'}`;
+    if (AUTO_GENERATE_ON_READ && workspaceId && month) {
+      const result = await ensureShiftInstancesForMonth({ workspaceId, month });
+      if (result.created > 0) cacheInvalidatePrefix(cacheKey);
+      if (result.warnings.length > 0) {
+        console.warn(
+          `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
+        );
+      }
+    }
+
     const shifts = await cacheGetOrSet({
       key: cacheKey,
       ttlMs: SHIFTS_TTL_MS,
