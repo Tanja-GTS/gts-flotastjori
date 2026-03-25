@@ -63,6 +63,7 @@ function normalizeTimeRange(value: unknown): string {
 }
 
 let inferredTripTemplatesListId: string | null = null;
+let inferredTemplatesListId: string | null = null;
 
 async function inferTripTemplatesListId(): Promise<string> {
   if (inferredTripTemplatesListId != null) return inferredTripTemplatesListId;
@@ -95,6 +96,16 @@ async function getTripTemplatesListId(): Promise<string> {
   const explicit = optionalEnv('MS_TRIP_TEMPLATES_LIST_ID', '').trim();
   if (explicit) return explicit;
   return inferTripTemplatesListId();
+}
+
+async function inferTemplatesListId(): Promise<string> {
+  if (inferredTemplatesListId != null) return inferredTemplatesListId;
+
+  const explicit =
+    optionalEnv('MS_TEMPLATES_LIST_ID', '').trim() ||
+    optionalEnv('MS_SHIFT_TEMPLATES_LIST_ID', '').trim();
+  inferredTemplatesListId = explicit;
+  return inferredTemplatesListId;
 }
 
 function pickFirst(fields: Record<string, unknown>, keys: string[]): string {
@@ -185,6 +196,13 @@ let cache:
       items: Array<{ id: string; fields: Record<string, unknown> }>;
     } = null;
 
+let templateTripLookupCache:
+  | null
+  | {
+      fetchedAtMs: number;
+      byTemplateId: Map<string, string[]>;
+    } = null;
+
 async function listTripTemplateItems(): Promise<Array<{ id: string; fields: Record<string, unknown> }>> {
   const listId = await getTripTemplatesListId();
   if (!listId) return [];
@@ -214,6 +232,122 @@ async function listTripTemplateItems(): Promise<Array<{ id: string; fields: Reco
 
   cache = { fetchedAtMs: now, items };
   return items;
+}
+
+function readLookupIdsFromTemplateField(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => {
+        if (entry == null) return [];
+        if (typeof entry === 'object') {
+          const lookupId = asString((entry as Record<string, unknown>).LookupId).trim();
+          if (lookupId) return [lookupId];
+          const id = asString((entry as Record<string, unknown>).id).trim();
+          if (id) return [id];
+          return [];
+        }
+        const raw = asString(entry).trim();
+        return raw ? [raw] : [];
+      })
+      .filter(Boolean);
+  }
+
+  if (value && typeof value === 'object') {
+    const lookupId = asString((value as Record<string, unknown>).LookupId).trim();
+    if (lookupId) return [lookupId];
+    const id = asString((value as Record<string, unknown>).id).trim();
+    if (id) return [id];
+  }
+
+  const raw = asString(value).trim();
+  if (!raw) return [];
+  if (/^\d+$/.test(raw)) return [raw];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed !== value) return readLookupIdsFromTemplateField(parsed);
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+function extractTripLookupIdsFromTemplateFields(fields: Record<string, unknown>): string[] {
+  const explicit = optionalEnv('TEMPLATE_FIELD_TRIPS', '').trim();
+  const candidateKeys = [
+    explicit,
+    'Trips0',
+    'Trips',
+    'TripTemplates',
+    'TripTemplate',
+    'tripTemplates',
+    'tripTemplate',
+  ].filter(Boolean);
+
+  for (const key of candidateKeys) {
+    const ids = readLookupIdsFromTemplateField(fields[key]);
+    if (ids.length > 0) return Array.from(new Set(ids));
+  }
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (!key.toLowerCase().includes('trip')) continue;
+    const ids = readLookupIdsFromTemplateField(value);
+    if (ids.length > 0) return Array.from(new Set(ids));
+  }
+
+  return [];
+}
+
+async function getTemplateLinkedTripIds(params: {
+  templateIds: string[];
+}): Promise<Map<string, string[]>> {
+  const unique = Array.from(new Set((params.templateIds || []).map((v) => asString(v).trim()).filter(Boolean)));
+  if (unique.length === 0) return new Map();
+
+  const listId = await inferTemplatesListId();
+  if (!listId) return new Map();
+
+  const ttlMs = Number(optionalEnv('TRIP_TEMPLATES_CACHE_TTL_MS', '30000')) || 30000;
+  const now = Date.now();
+  const cacheIsFresh = templateTripLookupCache && now - templateTripLookupCache.fetchedAtMs < ttlMs;
+  const missingTemplateIds = cacheIsFresh
+    ? unique.filter((templateId) => !templateTripLookupCache?.byTemplateId.has(templateId))
+    : unique;
+
+  if (cacheIsFresh && missingTemplateIds.length === 0) {
+    return new Map(
+      unique.map((templateId) => [templateId, templateTripLookupCache?.byTemplateId.get(templateId) || []])
+    );
+  }
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const byTemplateId = cacheIsFresh
+    ? new Map(templateTripLookupCache?.byTemplateId || [])
+    : new Map<string, string[]>();
+
+  await Promise.all(
+    missingTemplateIds.map(async (templateId) => {
+      const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+        graph.siteId
+      )}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(templateId)}?$expand=fields`;
+      try {
+        const item = await graphGet<GraphListItem>(url, token);
+        const fields = (item.fields || {}) as Record<string, unknown>;
+        byTemplateId.set(templateId, extractTripLookupIdsFromTemplateFields(fields));
+      } catch {
+        byTemplateId.set(templateId, []);
+      }
+    })
+  );
+
+  templateTripLookupCache = {
+    fetchedAtMs: now,
+    byTemplateId,
+  };
+
+  return new Map(unique.map((templateId) => [templateId, byTemplateId.get(templateId) || []]));
 }
 
 function toTripDto(item: { id: string; fields: Record<string, unknown> }): TripDto & {
@@ -315,6 +449,7 @@ export async function getTripsForTemplateIds(params: {
   if (unique.length === 0) return new Map();
 
   const items = await listTripTemplateItems();
+  const itemById = new Map(items.map((item) => [item.id, item]));
   const grouped = new Map<string, Array<ReturnType<typeof toTripDto>>>();
 
   for (const item of items) {
@@ -326,13 +461,44 @@ export async function getTripsForTemplateIds(params: {
     grouped.set(trip.templateId, arr);
   }
 
+  const linkedTripIdsByTemplateId = await getTemplateLinkedTripIds({ templateIds: unique });
+
+  const selectedByTemplateId = new Map<string, Array<NonNullable<ReturnType<typeof toTripDto>>>>();
+
+  for (const tid of unique) {
+    const linkedIds = linkedTripIdsByTemplateId.get(tid) || [];
+    const linkedTrips = linkedIds
+      .map((tripItemId) => {
+        const item = itemById.get(tripItemId);
+        if (!item) return null;
+
+        const parsed = toTripDto({
+          ...item,
+          fields: {
+            ...(item.fields || {}),
+            ShiftLookupId: (item.fields || {}).ShiftLookupId || tid,
+          },
+        });
+        return parsed;
+      })
+      .filter((value): value is NonNullable<ReturnType<typeof toTripDto>> => Boolean(value));
+
+    if (linkedTrips.length > 0) {
+      selectedByTemplateId.set(tid, linkedTrips);
+      continue;
+    }
+
+    const direct = (grouped.get(tid) || []).filter(Boolean) as Array<NonNullable<ReturnType<typeof toTripDto>>>;
+    direct.sort((a, b) => a.sortKey - b.sortKey);
+    selectedByTemplateId.set(tid, direct);
+  }
+
   const out = new Map<string, TripDto[]>();
 
   // Gather all trip item IDs + bus override ids so we can resolve stops + bus plates.
   const allTrips: Array<NonNullable<ReturnType<typeof toTripDto>>> = [];
   for (const tid of unique) {
-    const arr = (grouped.get(tid) || []).filter(Boolean) as Array<NonNullable<ReturnType<typeof toTripDto>>>;
-    arr.sort((a, b) => a.sortKey - b.sortKey);
+    const arr = selectedByTemplateId.get(tid) || [];
     allTrips.push(...arr);
     out.set(
       tid,
