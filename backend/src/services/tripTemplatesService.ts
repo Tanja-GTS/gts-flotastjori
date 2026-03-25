@@ -528,7 +528,7 @@ export async function getTripsForTemplateIds(params: {
 
   for (const tid of unique) {
     const current = out.get(tid) || [];
-    const tripsWithMeta = (grouped.get(tid) || []).filter(Boolean) as Array<NonNullable<ReturnType<typeof toTripDto>>>;
+    const tripsWithMeta = (selectedByTemplateId.get(tid) || []).filter(Boolean) as Array<NonNullable<ReturnType<typeof toTripDto>>>;
     const metaSorted = [...tripsWithMeta].sort((a, b) => a.sortKey - b.sortKey);
 
     const patched = current.map((t, idx) => {

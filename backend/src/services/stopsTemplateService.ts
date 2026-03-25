@@ -496,8 +496,13 @@ function computeStopsForTripIds(params: {
     // Decide whether this row is a break.
     // Preferred: explicit EventType or Duration field; fallback: numeric "Time" treated as duration.
     const numericTimeDuration = /^\d+$/.test(timeRaw) ? Number(timeRaw) : NaN;
+    const looksLikeDurationOnlyBreak =
+      durationFromField != null &&
+      !time &&
+      (!label || /^(stop|break|pause|meal|lunch)$/i.test(label));
     const isBreak =
       explicitType === 'break' ||
+      looksLikeDurationOnlyBreak ||
       (explicitType == null && durationFromField != null) ||
       (explicitType == null && Number.isFinite(numericTimeDuration));
 
