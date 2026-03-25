@@ -9,6 +9,8 @@ export type ShiftPatternDto = {
   id: string;
   route: string;
   routeName?: string;
+  timonRouteCode?: string;
+  timonShiftName?: string;
   shiftType: 'morning' | 'single' | 'evening' | string;
   // Optional grouping label (ex: "weekdays" / "weekend")
   weekPart?: string;
@@ -150,6 +152,16 @@ export async function listShiftPatterns(params?: {
       'routeTitle',
       'RouteTitle',
     ]);
+    const timonRouteCodeValue = readAny(fields, [
+      (f as any).timonRouteCode,
+      'timonRouteCode',
+      'TimonRouteCode',
+    ]);
+    const timonShiftNameValue = readAny(fields, [
+      (f as any).timonShiftName,
+      'timonShiftName',
+      'TimonShiftName',
+    ]);
     const titleValue = readAny(fields, ['Title', 'LinkTitle', 'LinkTitleNoMenu']);
     const dayValue = readAny(fields, [f.dayOfWeek, 'DayOfWeek']);
     const shiftTypeValue = readAny(fields, [f.shiftType, 'Type0']);
@@ -172,6 +184,8 @@ export async function listShiftPatterns(params?: {
       // For lookup columns, expanded fields usually include *LookupId*. We resolve this later.
       route: asString(routeValue),
       routeName: asString(routeNameValue).trim() || undefined,
+      timonRouteCode: asString(timonRouteCodeValue).trim() || undefined,
+      timonShiftName: asString(timonShiftNameValue).trim() || undefined,
       shiftType: normalizeShiftType(asString(shiftTypeValue)),
       weekPart: normalizeWeekPart(asString(weekPartValue)),
       dayOfWeek: Array.isArray(dayValue) ? asStringArray(dayValue) : asString(dayValue),
@@ -197,18 +211,27 @@ export async function listShiftPatterns(params?: {
     new Set(
       rawPatterns
         .map((p) => p.dto)
-        .filter((p) => !p.routeName && p.templateId)
+        .filter(
+          (p) =>
+            p.templateId && (!p.routeName || !p.timonRouteCode || !p.timonShiftName)
+        )
         .map((p) => String(p.templateId))
     )
   );
 
   const templateRouteNames = new Map<string, string>();
+  const templateTimonRouteCodes = new Map<string, string>();
+  const templateTimonShiftNames = new Map<string, string>();
   await Promise.all(
     templateIdsNeeding.map(async (templateId) => {
       try {
         const defaults = await getTemplateDefaults(templateId);
         const rn = String(defaults.routeName || '').trim();
         if (rn) templateRouteNames.set(templateId, rn);
+        const trc = String(defaults.timonRouteCode || '').trim();
+        if (trc) templateTimonRouteCodes.set(templateId, trc);
+        const tsn = String(defaults.timonShiftName || '').trim();
+        if (tsn) templateTimonShiftNames.set(templateId, tsn);
       } catch {
         // Ignore template enrichment errors; patterns will still work.
       }
@@ -217,10 +240,14 @@ export async function listShiftPatterns(params?: {
 
   const enriched = rawPatterns.map(({ dto, title }) => {
     const templateRouteName = dto.templateId ? templateRouteNames.get(String(dto.templateId)) : undefined;
+    const templateTimonRouteCode = dto.templateId ? templateTimonRouteCodes.get(String(dto.templateId)) : undefined;
+    const templateTimonShiftName = dto.templateId ? templateTimonShiftNames.get(String(dto.templateId)) : undefined;
     const routeName = String(templateRouteName || dto.routeName || title || '').trim();
     return {
       ...dto,
       routeName: routeName || undefined,
+      timonRouteCode: String(dto.timonRouteCode || templateTimonRouteCode || '').trim() || undefined,
+      timonShiftName: String(dto.timonShiftName || templateTimonShiftName || '').trim() || undefined,
     } as ShiftPatternDto;
   });
 

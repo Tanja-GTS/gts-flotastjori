@@ -96,6 +96,13 @@ services:
       - key: AUTO_GENERATE_SHIFTS_ON_READ
         value: "true"
 
+      # Automatically pull Timon assignment changes when a month is opened.
+      # Cooldown keeps repeat page loads from re-syncing too often.
+      - key: AUTO_TIMON_SYNC_ON_READ
+        value: "true"
+      - key: AUTO_TIMON_SYNC_COOLDOWN_MS
+        value: "1800000"
+
       # Optional: email sender UPN (only needed if using Graph sendMail)
       - key: MAIL_SENDER_UPN
         sync: false
@@ -108,3 +115,119 @@ services:
       # Optional: confirmation link expiry in days (default: 30)
       - key: CONFIRM_LINK_TTL_DAYS
         value: "30"
+
+  - type: cron
+    name: fleet-scheduler-timon-sync
+    env: node
+    plan: starter
+    rootDir: .
+    schedule: "0 4 * * *"
+    buildCommand: npm install --include=dev && npm run render:build
+    startCommand: npm --prefix backend run timon:sync
+    envVars:
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: MS_SITE_ID
+        sync: false
+      - key: MS_SHIFT_INSTANCES_LIST_ID
+        sync: false
+      - key: MS_SHIFT_PATTERNS_LIST_ID
+        sync: false
+      - key: MS_ROUTES_LIST_ID
+        sync: false
+      - key: MS_TEMPLATES_LIST_ID
+        sync: false
+      - key: MS_DRIVERS_LIST_ID
+        sync: false
+      - key: MS_TRIP_TEMPLATES_LIST_ID
+        sync: false
+      - key: MS_STOPS_TEMPLATE_LIST_ID
+        sync: false
+      - key: DEFAULT_BUS_LOOKUP_ID
+        sync: false
+      - key: LIST_FIELD_WORKSPACE_ID
+        sync: false
+      - key: LIST_FIELD_DATE
+        sync: false
+      - key: LIST_FIELD_TEMPLATE_ID
+        sync: false
+      - key: LIST_FIELD_PATTERN_ID
+        sync: false
+      - key: LIST_FIELD_DRIVER_ID
+        sync: false
+      - key: LIST_FIELD_BUS_ID
+        sync: false
+      - key: LIST_FIELD_CONFIRMATION_STATUS
+        sync: false
+      - key: LIST_FIELD_NOTES
+        sync: false
+      - key: LIST_FIELD_GENERATED
+        sync: false
+      - key: LIST_FIELD_MANUAL_OVERRIDE
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_SOURCE
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_SHIFT_ID
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_EMPLOYEE_SSN
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_EMPLOYEE_NAME
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_SHIFT_NAME
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_ARR
+        sync: false
+      - key: LIST_FIELD_EXTERNAL_DEP
+        sync: false
+      - key: LIST_FIELD_LAST_SYNCED_AT
+        sync: false
+      - key: DRIVER_FIELD_SSN
+        sync: false
+      - key: PATTERN_FIELD_ROUTE
+        sync: false
+      - key: PATTERN_FIELD_ROUTE_NAME
+        sync: false
+      - key: PATTERN_FIELD_TIMON_ROUTE_CODE
+        sync: false
+      - key: PATTERN_FIELD_TIMON_SHIFT_NAME
+        sync: false
+      - key: PATTERN_FIELD_SHIFT_TYPE
+        sync: false
+      - key: PATTERN_FIELD_WEEK_PART
+        sync: false
+      - key: PATTERN_FIELD_DAY_OF_WEEK
+        sync: false
+      - key: PATTERN_FIELD_START_TIME
+        sync: false
+      - key: PATTERN_FIELD_END_TIME
+        sync: false
+      - key: PATTERN_FIELD_WORKSPACE_ID
+        sync: false
+      - key: PATTERN_FIELD_TEMPLATE_ID
+        sync: false
+      - key: TEMPLATE_FIELD_ROUTE_NAME
+        sync: false
+      - key: TEMPLATE_FIELD_TIMON_ROUTE_CODE
+        sync: false
+      - key: TEMPLATE_FIELD_TIMON_SHIFT_NAME
+        sync: false
+      - key: TIMON_API_BASE_URL
+        sync: false
+      - key: TIMON_API_TOKEN
+        sync: false
+      - key: TIMON_API_TOKEN_HEADER
+        sync: false
+      - key: TIMON_API_TOKEN_PREFIX
+        sync: false
+      - key: TIMON_SYNC_WORKSPACE
+        value: "south"
+      - key: TIMON_SYNC_LOOKBACK_MONTHS
+        value: "1"
+      - key: TIMON_SYNC_LOOKAHEAD_MONTHS
+        value: "0"
+      - key: TIMON_SYNC_DRY_RUN
+        value: "false"

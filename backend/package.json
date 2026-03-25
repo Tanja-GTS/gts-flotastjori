@@ -8,6 +8,7 @@
     "graph:login": "tsx src/scripts/graphLogin.ts",
     "graph:test": "tsx src/scripts/graphTest.ts",
     "generate:shifts": "tsx src/scripts/generateShiftsCli.ts",
+    "timon:sync": "tsx src/scripts/timonSyncCli.ts",
     "backup:lists": "tsx src/scripts/backupListsCli.ts",
     "start": "tsx src/server.ts",
     "start:prod": "SERVE_FRONTEND=true tsx src/server.ts",

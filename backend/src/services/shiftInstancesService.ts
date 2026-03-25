@@ -4,6 +4,7 @@ import {
   getGraphConfig,
   getListIds,
   getShiftInstancesFieldNames,
+  getShiftInstanceExternalFieldNames,
 } from './msListsConfig';
 import { listShiftPatterns, type ShiftPatternDto } from './shiftPatternsService';
 import { listWorkspaces } from './workspacesService';
@@ -26,6 +27,14 @@ export type ShiftInstanceDto = {
   notes?: string;
   generated?: boolean;
   manualOverride?: boolean;
+  externalSource?: string;
+  externalShiftId?: string;
+  externalEmployeeSsn?: string;
+  externalEmployeeName?: string;
+  externalShiftName?: string;
+  externalArr?: string;
+  externalDep?: string;
+  lastSyncedAt?: string;
 };
 
 // Hydrated shift object the frontend can use immediately
@@ -39,6 +48,8 @@ export type HydratedShiftDto = {
   date: string; // YYYY-MM-DD
   route: string;
   routeName?: string;
+  timonRouteCode?: string;
+  timonShiftName?: string;
   shiftType: string;
   // Optional label from the pattern (ex: "weekdays" / "weekend")
   weekPart?: string;
@@ -155,7 +166,7 @@ export async function deleteGeneratedShiftInstances(params: {
   return { deleted };
 }
 
-async function patchShiftInstanceFields(params: {
+export async function patchShiftInstanceFields(params: {
   itemId: string;
   fields: Record<string, unknown>;
 }): Promise<void> {
@@ -489,6 +500,7 @@ export async function listShiftInstances(params: {
   const graph = getGraphConfig();
   const lists = getListIds();
   const f = getShiftInstancesFieldNames();
+  const fExt = getShiftInstanceExternalFieldNames();
 
   const token = await getGraphAppToken(graph);
 
@@ -521,6 +533,14 @@ export async function listShiftInstances(params: {
       f.notes,
       f.generated,
       f.manualOverride,
+      fExt.externalSource,
+      fExt.externalShiftId,
+      fExt.externalEmployeeSsn,
+      fExt.externalEmployeeName,
+      fExt.externalShiftName,
+      fExt.externalArr,
+      fExt.externalDep,
+      fExt.lastSyncedAt,
     ])
   ).join(',');
 
@@ -610,6 +630,14 @@ export async function listShiftInstances(params: {
         notes: asString(fields[f.notes]) || undefined,
         generated: asBoolean(fields[f.generated]),
         manualOverride: asBoolean(fields[f.manualOverride]),
+        externalSource: asString(fields[fExt.externalSource]) || undefined,
+        externalShiftId: asString(fields[fExt.externalShiftId]) || undefined,
+        externalEmployeeSsn: asString(fields[fExt.externalEmployeeSsn]) || undefined,
+        externalEmployeeName: asString(fields[fExt.externalEmployeeName]) || undefined,
+        externalShiftName: asString(fields[fExt.externalShiftName]) || undefined,
+        externalArr: asString(fields[fExt.externalArr]) || undefined,
+        externalDep: asString(fields[fExt.externalDep]) || undefined,
+        lastSyncedAt: asString(fields[fExt.lastSyncedAt]) || undefined,
       };
       return dto;
     })
@@ -1164,6 +1192,8 @@ export async function listHydratedShifts(params: {
         date: inst.date,
         route: pattern.route,
         routeName: pattern.routeName,
+        timonRouteCode: (pattern as any).timonRouteCode,
+        timonShiftName: (pattern as any).timonShiftName,
         shiftType: pattern.shiftType,
         weekPart: (pattern as any).weekPart,
         name: String(pattern.routeName || pattern.route || pattern.shiftType || ''),
@@ -1259,6 +1289,8 @@ export async function getHydratedShiftById(
     date: inst.date,
     route: pattern.route,
     routeName: pattern.routeName,
+    timonRouteCode: (pattern as any).timonRouteCode,
+    timonShiftName: (pattern as any).timonShiftName,
     shiftType: pattern.shiftType,
     weekPart: (pattern as any).weekPart,
     name: String(pattern.routeName || pattern.route || pattern.shiftType || ''),
@@ -1378,6 +1410,8 @@ export async function getHydratedWeekShiftsForAnchor(params: {
         date: inst.date,
         route: pattern.route,
         routeName: pattern.routeName,
+        timonRouteCode: (pattern as any).timonRouteCode,
+        timonShiftName: (pattern as any).timonShiftName,
         shiftType: pattern.shiftType,
         weekPart: (pattern as any).weekPart,
         name: String(pattern.routeName || pattern.route || pattern.shiftType || ''),

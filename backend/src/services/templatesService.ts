@@ -13,6 +13,8 @@ type TemplateDefaults = {
   driverLookupId?: number;
   routeLookupId?: number;
   routeName?: string;
+  timonRouteCode?: string;
+  timonShiftName?: string;
 };
 
 function asString(value: unknown): string {
@@ -37,6 +39,8 @@ export async function getTemplateDefaults(templateId: string): Promise<TemplateD
   if (!templatesListId) return {};
 
   const routeNameField = optionalEnv('TEMPLATE_FIELD_ROUTE_NAME', 'routeName').trim();
+  const timonRouteCodeField = optionalEnv('TEMPLATE_FIELD_TIMON_ROUTE_CODE', 'timonRouteCode').trim();
+  const timonShiftNameField = optionalEnv('TEMPLATE_FIELD_TIMON_SHIFT_NAME', 'timonShiftName').trim();
 
   const id = String(templateId || '').trim();
   if (!id) return {};
@@ -61,11 +65,25 @@ export async function getTemplateDefaults(templateId: string): Promise<TemplateD
     asString((fields as any).Title).trim() ||
     '';
 
+  const timonRouteCode =
+    asString((timonRouteCodeField && (fields as any)[timonRouteCodeField]) || '').trim() ||
+    asString((fields as any).timonRouteCode).trim() ||
+    asString((fields as any).TimonRouteCode).trim() ||
+    '';
+
+  const timonShiftName =
+    asString((timonShiftNameField && (fields as any)[timonShiftNameField]) || '').trim() ||
+    asString((fields as any).timonShiftName).trim() ||
+    asString((fields as any).TimonShiftName).trim() ||
+    '';
+
   const defaults: TemplateDefaults = {
     busLookupId: asNumber(fields.BusLookupId),
     driverLookupId: asNumber(fields.DriverLookupId),
     routeLookupId: asNumber(fields.RouteLookupId),
     routeName: routeName || undefined,
+    timonRouteCode: timonRouteCode || undefined,
+    timonShiftName: timonShiftName || undefined,
   };
 
   cache.set(id, defaults);

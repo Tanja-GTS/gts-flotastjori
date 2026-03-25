@@ -1,6 +1,6 @@
 import { getGraphAppToken } from './graphAuth';
 import { graphGet } from './graphClient';
-import { getGraphConfig, getListIds, getShiftInstancesFieldNames } from './msListsConfig';
+import { getDriversFieldNames, getGraphConfig, getListIds, getShiftInstancesFieldNames } from './msListsConfig';
 import { optionalEnv } from '../utils/env';
 
 type GraphColumn = Record<string, unknown> & {
@@ -66,9 +66,49 @@ async function getDriversListId(): Promise<string> {
 export type DriverDto = {
   id: string;
   name: string;
+  ssn?: string;
   email?: string;
   phone?: string;
 };
+
+function normalizeSsn(raw: unknown): string {
+  const s = asString(raw).trim();
+  if (!s) return '';
+  return s.replace(/\s+/g, '').replace(/-/g, '');
+}
+
+function looksLikeSsn(raw: string): boolean {
+  return /^\d{10}$/.test(normalizeSsn(raw));
+}
+
+function pickSsn(fields: Record<string, unknown>): string {
+  const configured = String(getDriversFieldNames().ssn || '').trim();
+  const candidates = [
+    configured,
+    'ssn',
+    'SSN',
+    'kennitala',
+    'Kennitala',
+    'kt',
+    'KT',
+    'nationalId',
+    'NationalId',
+    'employeeSsn',
+    'EmployeeSsn',
+  ].filter(Boolean);
+
+  for (const key of candidates) {
+    const value = normalizeSsn(fields[key]);
+    if (looksLikeSsn(value)) return value;
+  }
+
+  for (const value of Object.values(fields)) {
+    const normalized = normalizeSsn(value);
+    if (looksLikeSsn(normalized)) return normalized;
+  }
+
+  return '';
+}
 
 function pickEmail(fields: Record<string, unknown>): string {
   // Try common column internal/display names.
@@ -188,12 +228,14 @@ export async function listDrivers(): Promise<DriverDto[]> {
         asString(fields.FullName) ||
         '';
 
+      const ssn = pickSsn(fields);
       const email = pickEmail(fields);
       const phone = pickPhone(fields);
 
       return {
         id: String(item.id || '').trim(),
         name: name.trim() || String(item.id || '').trim(),
+        ssn: ssn || undefined,
         email: email || undefined,
         phone: phone || undefined,
       };
@@ -213,6 +255,24 @@ export async function resolveDrivers(params: {
   const map = new Map<string, DriverDto>();
   for (const d of drivers) {
     if (uniqueIds.includes(d.id)) map.set(d.id, d);
+  }
+  return map;
+}
+
+export async function resolveDriversBySsn(params: {
+  ssns: string[];
+}): Promise<Map<string, DriverDto>> {
+  const uniqueSsns = Array.from(
+    new Set(params.ssns.map((s) => normalizeSsn(s)).filter((s) => looksLikeSsn(s)))
+  );
+  if (uniqueSsns.length === 0) return new Map();
+
+  const drivers = await listDrivers();
+  const map = new Map<string, DriverDto>();
+  for (const driver of drivers) {
+    const ssn = normalizeSsn(driver.ssn);
+    if (!ssn || !uniqueSsns.includes(ssn)) continue;
+    if (!map.has(ssn)) map.set(ssn, driver);
   }
   return map;
 }

@@ -56,6 +56,128 @@ The backend will auto-detect the list by name and expose it at:
 
 The frontend will use this list automatically.
 
+## Tímon prep (recommended before API sync)
+
+If you plan to sync assigned shifts from Tímon into this app, prepare your Microsoft Lists now so the backend can match people and shifts reliably.
+
+### Drivers list
+
+Add a text column that stores each driver's kennitala / SSN.
+
+- Recommended internal/display name: `ssn`
+- Example value: `1201743399`
+- One driver should have exactly one SSN, and each SSN should map to only one driver
+
+The backend can read this from the default `ssn` column, or from a different internal name if you set:
+
+- `DRIVER_FIELD_SSN=<internal_name>`
+
+You can verify the Drivers list fields with:
+
+```bash
+curl "http://localhost:4000/api/debug/list-fields-any?list=Drivers&sample=1"
+```
+
+### ShiftInstances list
+
+To make external shift sync idempotent, add these optional columns to `ShiftInstances` now:
+
+- `externalSource` (Single line of text) — example: `timon`
+- `externalShiftId` (Single line of text) — Tímon `shiftplan.id`
+- `externalEmployeeSsn` (Single line of text) — assigned driver's kennitala from Tímon
+- `externalEmployeeName` (Single line of text) — useful for auditing
+- `externalShiftName` (Single line of text) — Tímon `name`
+- `externalArr` (Date and time) — Tímon `arr`
+- `externalDep` (Date and time) — Tímon `dep`
+- `lastSyncedAt` (Date and time) — when your backend last synced that row
+
+These are not required for the app to run today, but they are strongly recommended for the upcoming Tímon integration because they let the backend:
+
+- match the same Tímon shift across repeated syncs
+- tell whether a row came from Tímon
+- audit assignment changes without guessing from the visible schedule
+
+If your internal column names differ, configure them in `backend/.env` using:
+
+- `LIST_FIELD_EXTERNAL_SOURCE`
+- `LIST_FIELD_EXTERNAL_SHIFT_ID`
+- `LIST_FIELD_EXTERNAL_EMPLOYEE_SSN`
+- `LIST_FIELD_EXTERNAL_EMPLOYEE_NAME`
+- `LIST_FIELD_EXTERNAL_SHIFT_NAME`
+- `LIST_FIELD_EXTERNAL_ARR`
+- `LIST_FIELD_EXTERNAL_DEP`
+- `LIST_FIELD_LAST_SYNCED_AT`
+
+### Initial workspace rule
+
+If only South Iceland shifts come from Tímon for now, treat imported Tímon rows as workspace `south` during the first integration.
+
+### Recommended verification before live sync
+
+- Ensure every syncable driver has an SSN in the Drivers list
+- Ensure there are no duplicate SSNs in the Drivers list
+- Ensure South shifts have stable names and times so the first import can be matched cleanly
+- Use [backend/.env.example](backend/.env.example) as the source of supported env keys
+
+### Daily scheduled sync (recommended)
+
+If “good every morning” is sufficient, the most reliable approach is a daily cron sync.
+
+- Add a Render cron service that runs `npm --prefix backend run timon:sync`
+- Scheduled time: every day at `04:00 UTC` (`GMT+00`)
+- Default window: previous month through current month
+- Default workspace: `south`
+- Default mode: real write (`TIMON_SYNC_DRY_RUN=false`)
+
+Useful env vars for the cron job:
+
+- `TIMON_SYNC_WORKSPACE=south`
+- `TIMON_SYNC_LOOKBACK_MONTHS=1`
+- `TIMON_SYNC_LOOKAHEAD_MONTHS=0`
+- Optional fixed range with `TIMON_SYNC_FROMDATE` and `TIMON_SYNC_TODATE`
+
+You can also run the same job manually:
+
+```bash
+npm --prefix backend run timon:sync
+```
+
+Example manual range:
+
+```bash
+npm --prefix backend run timon:sync -- --workspace south --fromdate 2026-02-01 --todate 2026-03-31
+```
+
+### Useful debug endpoints before the token arrives
+
+- Readiness check: `GET /api/debug/timon-readiness`
+- Preview matching using pasted JSON: `POST /api/debug/timon-preview`
+
+Example preview body:
+
+```json
+{
+	"workspaceId": "south",
+	"shifts": [
+		{
+			"id": 123,
+			"name": "Selfoss",
+			"ssn": "1201743399",
+			"ssn_name": "Driver Name",
+			"arr": "2026-03-20T07:00:00Z",
+			"dep": "2026-03-20T15:00:00Z",
+			"unassigned": false
+		}
+	]
+}
+```
+
+This preview does not write anything. It only shows:
+
+- whether the driver SSN matches a driver in your Drivers list
+- which local South shift is the best candidate match
+- which shifts still need better naming/time alignment before live sync
+
 ### Option B: Set the Workspaces list id explicitly
 
 If your list has a different name (or auto-detect fails), set this in `backend/.env` (and in Render env for production):
@@ -68,6 +190,9 @@ The app shows shifts per workspace based on the `workspaceId` stored on each **S
 
 - Generated shifts: the generator writes `workspaceId` when creating ShiftInstances.
 - Manual entries (if you ever create instances by hand): must include `workspaceId` too.
+- By default, opening a workspace/month now auto-generates any missing ShiftInstances from valid ShiftPatterns.
+- To disable that behavior, set `AUTO_GENERATE_SHIFTS_ON_READ=false`.
+- To inspect why a pattern is not materializing, call `/api/debug/shift-generation-preview?workspaceId=<slug>&month=YYYY-MM`.
 
 If you want shift generation to be workspace-specific, your **ShiftPatterns** list should also have a `workspaceId` column (or configure `PATTERN_FIELD_WORKSPACE_ID` to match your internal name).
 

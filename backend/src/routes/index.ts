@@ -5,6 +5,7 @@ import { generateRouter } from './generate';
 import { debugRouter } from './debug';
 import { busesRouter } from './buses';
 import { driversRouter } from './drivers';
+import { timonRouter } from './timon';
 import { workspacesRouter } from './workspaces';
 
 export const apiRouter = Router();
@@ -18,6 +19,7 @@ apiRouter.use('/patterns', patternsRouter);
 apiRouter.use('/generate', generateRouter);
 apiRouter.use('/buses', busesRouter);
 apiRouter.use('/drivers', driversRouter);
+apiRouter.use('/timon', timonRouter);
 apiRouter.use('/workspaces', workspacesRouter);
 
 function boolEnv(name: string): boolean {
