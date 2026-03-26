@@ -591,6 +591,53 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
   gap: 8px;
   flex-wrap: nowrap;
 }
+
+.timelineModeBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #33363E;
+  background: #fff;
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.timelineModeBadge--record {
+  background: #f5f1e8;
+  border-color: #b08b57;
+  color: #6b4e1f;
+}
+
+.timelineModeBadge--active {
+  background: #edf6f2;
+  border-color: #2d6d5d;
+  color: #1f5146;
+}
+
+.timelineModeNotice {
+  color: #6D7076;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.timelineDrawerNotice {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d9c7a5;
+  background: #fbf7ef;
+  color: #6b4e1f;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+}
 .timelineControlsRow__right {
   display: flex;
   align-items: center;
