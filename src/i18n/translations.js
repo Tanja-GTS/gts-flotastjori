@@ -30,9 +30,6 @@ export const translations = {
     timeline: {
       generateMonth: 'Generate month',
       addShift: 'Add shift',
-      recordMonthLabel: 'Record',
-      activeMonthLabel: 'Active',
-      recordMonthHelp: 'Past months are read-only records.',
       saveShift: 'Save shift',
       showUnassignedOnly: 'Unassigned shifts',
       loadingShifts: 'Loading shifts…',
@@ -237,9 +234,6 @@ export const translations = {
   timeline: {
     generateMonth: 'Búa til mánuð',
     addShift: 'Bæta við vakt',
-    recordMonthLabel: 'Skráning',
-    activeMonthLabel: 'Virkt',
-    recordMonthHelp: 'Liðnir mánuðir eru aðeins lesanlegar skrár.',
     saveShift: 'Vista vakt',
     showUnassignedOnly: 'Óúthlutaðar vaktir',
     loadingShifts: 'Hleður vöktum…',

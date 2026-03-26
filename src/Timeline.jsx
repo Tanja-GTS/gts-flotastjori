@@ -514,14 +514,7 @@ export default function Timeline({
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   }, []);
-  const nextMonthStart = useMemo(
-    () => new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + 1, 1),
-    [currentMonthStart]
-  );
   const isRecordMonth = viewedMonthStart.getTime() < currentMonthStart.getTime();
-  const isActiveMonth =
-    viewedMonthStart.getTime() === currentMonthStart.getTime() ||
-    viewedMonthStart.getTime() === nextMonthStart.getTime();
 
   useEffect(() => {
     if (!onRangeChange) return;
@@ -638,17 +631,6 @@ export default function Timeline({
         workspaceId: workspaceId
       },
     ]);
-
-    // Reset form
-    setNewShift({
-      route: '',
-      shiftType: 'morning',
-      date: '',
-      name: '',
-      startTime: '',
-      endTime: '',
-      defaultBus: '',
-    });
     setAddMode(false);
   };
 
@@ -878,16 +860,6 @@ export default function Timeline({
                   </span>
                 </button>
 
-                {isRecordMonth ? (
-                  <span className="timelineModeBadge timelineModeBadge--record">
-                    {t('timeline.recordMonthLabel')}
-                  </span>
-                ) : isActiveMonth ? (
-                  <span className="timelineModeBadge timelineModeBadge--active">
-                    {t('timeline.activeMonthLabel')}
-                  </span>
-                ) : null}
-
                 <div className="monthbar__nav" aria-label={t('timeline.changeWeek')}>
                   <button
                     className="monthbar__navBtn"
@@ -1018,7 +990,6 @@ export default function Timeline({
             checked={showUnassignedOnly}
             onChange={(e) => setShowUnassignedOnly(e.currentTarget.checked)}
           />
-          {isRecordMonth ? <div className="timelineModeNotice">{t('timeline.recordMonthHelp')}</div> : null}
         </div>
 
         {/* Right: Generate shifts (conditional) + Add shift */}
