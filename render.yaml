@@ -97,9 +97,10 @@ services:
         value: "true"
 
       # Automatically pull Timon assignment changes when a month is opened.
-      # Cooldown keeps repeat page loads from re-syncing too often.
+      # Disabled in production because it makes month opening feel too slow.
+      # Timon still syncs every day via the dedicated 04:00 UTC cron job.
       - key: AUTO_TIMON_SYNC_ON_READ
-        value: "true"
+        value: "false"
       - key: AUTO_TIMON_SYNC_COOLDOWN_MS
         value: "1800000"
 
