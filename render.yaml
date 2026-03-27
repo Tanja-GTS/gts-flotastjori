@@ -96,6 +96,11 @@ services:
       - key: AUTO_GENERATE_SHIFTS_ON_READ
         value: "true"
 
+      # Keep hydrated month responses warm for managers opening the same months repeatedly.
+      # Writes already invalidate this cache explicitly.
+      - key: CACHE_SHIFTS_TTL_MS
+        value: "300000"
+
       # Automatically pull Timon assignment changes when a month is opened.
       # Disabled in production because it makes month opening feel too slow.
       # Timon still syncs every day via the dedicated 04:00 UTC cron job.

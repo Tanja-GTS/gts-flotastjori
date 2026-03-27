@@ -1,5 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Timeline from './Timeline';
 import ConfirmShift from './ConfirmShift';
 import ErrorBoundary from './ErrorBoundary';
@@ -76,6 +76,15 @@ function withNextMonthLookahead(months) {
   const lastMonth = list[list.length - 1];
   const nextMonth = nextMonthKey(lastMonth);
   return nextMonth ? [...list, nextMonth] : list;
+}
+
+function mergeShiftsById(current, incoming) {
+  const merged = new Map((current || []).map((shift) => [shift.id, shift]));
+  for (const shift of incoming || []) {
+    if (!shift?.id) continue;
+    merged.set(shift.id, shift);
+  }
+  return Array.from(merged.values());
 }
 
 function normalizeShift(apiShift) {
@@ -156,6 +165,11 @@ export default function App() {
     } catch {
       // ignore
     }
+  }, [workspaceId]);
+
+  const workspaceIdRef = useRef(workspaceId);
+  useEffect(() => {
+    workspaceIdRef.current = workspaceId;
   }, [workspaceId]);
 
   const [visibleRange, setVisibleRange] = useState({ start: null, end: null, viewDays: 7 });
@@ -339,28 +353,41 @@ export default function App() {
     };
   }, [canCallApi, didBackfillDriverPhones, driverOptions]);
 
-  const monthsToFetch = useMemo(
-    () => withNextMonthLookahead(monthsInRange(visibleRange.start, visibleRange.end)),
+  const visibleMonths = useMemo(
+    () => monthsInRange(visibleRange.start, visibleRange.end),
     [visibleRange.start, visibleRange.end]
   );
 
+  const prefetchMonths = useMemo(() => {
+    const all = withNextMonthLookahead(visibleMonths);
+    const visible = new Set(visibleMonths);
+    return all.filter((month) => !visible.has(month));
+  }, [visibleMonths]);
+
   const loadShiftsForMonths = useCallback(
-    async (months) => {
-      if (!workspaceId) return;
+    async (months, options = {}) => {
+      if (!workspaceId) return [];
       const list = Array.from(new Set((months || []).filter(Boolean)));
-      if (list.length === 0) return;
+      if (list.length === 0) return [];
+
+      const requestWorkspaceId = workspaceId;
 
       const pages = await Promise.all(list.map((m) => fetchShifts({ workspaceId, month: m })));
       const merged = pages.flat().map(normalizeShift);
       const byId = new Map(merged.map((s) => [s.id, s]));
-      setShifts(Array.from(byId.values()));
+      const nextShifts = Array.from(byId.values());
+
+      if (workspaceIdRef.current !== requestWorkspaceId) return nextShifts;
+
+      setShifts((prev) => (options.merge ? mergeShiftsById(prev, nextShifts) : nextShifts));
+      return nextShifts;
     },
     [workspaceId]
   );
 
   const refreshShifts = useCallback(async () => {
     if (!workspaceId) return;
-    if (monthsToFetch.length === 0) return;
+    if (visibleMonths.length === 0) return;
 
     if (backendAuthEnabled && authStatus !== 'signed-in') {
       setLoadError('Sign in required to load shifts.');
@@ -371,14 +398,17 @@ export default function App() {
     setIsLoadingShifts(true);
     setLoadError('');
     try {
-      await loadShiftsForMonths(monthsToFetch);
+      await loadShiftsForMonths(visibleMonths);
+      if (prefetchMonths.length > 0) {
+        void loadShiftsForMonths(prefetchMonths, { merge: true }).catch(() => {});
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : t('errors.failedLoadShifts'));
       setShifts([]);
     } finally {
       setIsLoadingShifts(false);
     }
-  }, [workspaceId, monthsToFetch, t, loadShiftsForMonths, backendAuthEnabled, authStatus]);
+  }, [workspaceId, visibleMonths, prefetchMonths, t, loadShiftsForMonths, backendAuthEnabled, authStatus]);
 
   useEffect(() => {
     if (!canCallApi) return;
@@ -411,7 +441,11 @@ export default function App() {
         // IMPORTANT: always fetch the generated month explicitly.
         // If the user clicks Generate before the Timeline has reported its visible range,
         // the in-flight handler could be holding a refreshShifts() closure with an empty monthsToFetch.
-        await loadShiftsForMonths(withNextMonthLookahead([month]));
+        await loadShiftsForMonths([month]);
+        const nextMonth = withNextMonthLookahead([month]).filter((value) => value !== month);
+        if (nextMonth.length > 0) {
+          void loadShiftsForMonths(nextMonth, { merge: true }).catch(() => {});
+        }
 
         const durationMs = Math.max(0, Date.now() - startedAt);
         const prev = readGenerateDurationsMs();
