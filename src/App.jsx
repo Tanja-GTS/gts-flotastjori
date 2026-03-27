@@ -55,6 +55,29 @@ function monthsInRange(startISO, endISO) {
   return months;
 }
 
+function nextMonthKey(monthKey) {
+  const match = String(monthKey || '').match(/^(\d{4})-(\d{2})$/);
+  if (!match) return '';
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex)) return '';
+
+  const next = new Date(year, monthIndex + 1, 1);
+  const yyyy = String(next.getFullYear());
+  const mm = String(next.getMonth() + 1).padStart(2, '0');
+  return `${yyyy}-${mm}`;
+}
+
+function withNextMonthLookahead(months) {
+  const list = Array.from(new Set((months || []).filter(Boolean)));
+  if (list.length === 0) return [];
+
+  const lastMonth = list[list.length - 1];
+  const nextMonth = nextMonthKey(lastMonth);
+  return nextMonth ? [...list, nextMonth] : list;
+}
+
 function normalizeShift(apiShift) {
   return {
     ...apiShift,
@@ -317,7 +340,7 @@ export default function App() {
   }, [canCallApi, didBackfillDriverPhones, driverOptions]);
 
   const monthsToFetch = useMemo(
-    () => monthsInRange(visibleRange.start, visibleRange.end),
+    () => withNextMonthLookahead(monthsInRange(visibleRange.start, visibleRange.end)),
     [visibleRange.start, visibleRange.end]
   );
 
@@ -388,7 +411,7 @@ export default function App() {
         // IMPORTANT: always fetch the generated month explicitly.
         // If the user clicks Generate before the Timeline has reported its visible range,
         // the in-flight handler could be holding a refreshShifts() closure with an empty monthsToFetch.
-        await loadShiftsForMonths([month]);
+        await loadShiftsForMonths(withNextMonthLookahead([month]));
 
         const durationMs = Math.max(0, Date.now() - startedAt);
         const prev = readGenerateDurationsMs();
