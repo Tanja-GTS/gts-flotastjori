@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip, Modal } from '@mantine/core';
-import { IconAlertCircle, IconChevronDown, IconChevronUp, IconChevronLeft, IconChevronRight, IconPrinter } from '@tabler/icons-react';
-import { addDays, format, parseISO, startOfWeek } from 'date-fns';
+import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip } from '@mantine/core';
+import { IconAlertCircle, IconChevronDown, IconChevronUp, IconChevronLeft, IconChevronRight, IconPrinter, IconUser } from '@tabler/icons-react';
+import { addDays, format, parseISO } from 'date-fns';
 import './timeline.css';
 import { selectRoutesForWorkspace, selectVisibleShifts } from './domain/selectors';
 import { SHIFT_TYPES_ORDERED, SHIFT_TYPE_LABELS, isShiftType } from './domain/shiftTypes';
@@ -75,7 +75,7 @@ export default function Timeline({
   onSignIn,
 }) {
   const navigate = useNavigate();
-  const { lang, setLang, t, locale } = useI18n();
+  const { lang, setLang, t } = useI18n();
 
   const langToggleLabel = lang === 'is' ? 'EN' : 'ÍS';
   const monthLong = useCallback((d) => t(`date.months.${monthKeyFromDate(d)}`), [t]);
@@ -101,7 +101,6 @@ export default function Timeline({
   const [isAssigning, setIsAssigning] = useState(false);
   const [assigningMode, setAssigningMode] = useState(null);
   const [assignError, setAssignError] = useState('');
-  const [assignReviewOpened, setAssignReviewOpened] = useState(false);
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [viewDays, setViewDays] = useState(7);
   const [showNotes, setShowNotes] = useState(false);
@@ -1382,22 +1381,92 @@ export default function Timeline({
                   {t('timeline.drawer.recordReadOnly')}
                 </div>
               )}
-              <p><strong>{t('timeline.drawer.route')}:</strong> {selectedShift.route}</p>
-              {selectedShift.routeName && selectedShift.routeName !== selectedShift.route && (
-                <p><strong>{t('timeline.drawer.routeName')}:</strong> {selectedShift.routeName}</p>
-              )}
-              <p>
-                <strong>{t('timeline.drawer.shiftType')}:</strong>{' '}
-                {(() => {
-                  const normalized = selectedShift ? normalizeShiftType(selectedShift) : '';
-                  const base = normalized
-                    ? getShiftTypeLabel(selectedShift, normalized)
-                    : String(SHIFT_TYPE_LABELS[selectedShift?.shiftType] || selectedShift?.shiftType || '').trim();
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: 56,
+                      height: 56,
+                      minWidth: 56,
+                      borderRadius: 16,
+                      border: '1px solid #d8d8d8',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#111',
+                      background: '#fff',
+                    }}
+                  >
+                    {selectedShift.route}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {selectedShift.routeName || selectedShift.route}
+                    </div>
+                    {selectedShift.timonRouteCode ? (
+                      <div style={{ marginTop: 4, color: '#666', fontSize: 13 }}>
+                        {selectedShift.timonRouteCode}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                {selectedShift.season ? (
+                  <div
+                    style={{
+                      alignSelf: 'flex-start',
+                      background: '#fff3bf',
+                      color: '#343a40',
+                      borderRadius: 999,
+                      padding: '8px 14px',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {`${selectedShift.season} Schedule`}
+                  </div>
+                ) : null}
+              </div>
 
-                  return normalized === 'evening' && isDinnerShift(selectedShift) ? `${base} shift` : base;
-                })()}
-              </p>
-              <p><strong>{t('timeline.drawer.time')}:</strong> {selectedShift.time}</p>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: 16,
+                  margin: '18px 0 16px',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('timeline.drawer.date')}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {selectedShift.date ? format(parseISO(selectedShift.date), 'dd.MM.yyyy') : '—'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('timeline.drawer.duration')}</div>
+                  <div style={{ fontWeight: 700 }}>{selectedShift.time || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('timeline.drawer.shiftType')}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {(() => {
+                      const normalized = selectedShift ? normalizeShiftType(selectedShift) : '';
+                      const base = normalized
+                        ? getShiftTypeLabel(selectedShift, normalized)
+                        : String(SHIFT_TYPE_LABELS[selectedShift?.shiftType] || selectedShift?.shiftType || '').trim();
+
+                      return normalized === 'evening' && isDinnerShift(selectedShift) ? `${base} shift` : base;
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('timeline.drawer.licensePlate')}</div>
+                  <div style={{ fontWeight: 700, color: busesUsed.length ? '#111' : '#777' }}>
+                    {busesUsed.length ? busesUsed.join(', ') : '—'}
+                  </div>
+                </div>
+              </div>
 
               {(() => {
                 const driverLabel = String(selectedShift.driver || '').trim();
@@ -1444,31 +1513,37 @@ export default function Timeline({
                 );
               })()}
 
-<div style={{ marginBottom: 12 }}>
-  <strong style={{ fontSize: 13 }}>{t('timeline.drawer.busesUsed')}</strong>
-  <div style={{ fontSize: 13, color: '#333', marginTop: 4 }}>
-    {busesUsed.length === 0 ? (
-      <span style={{ color: '#777' }}>{t('timeline.noBusAssigned')}</span>
-    ) : (
-      busesUsed.join(', ')
-    )}
-  </div>
-</div>
-
-
 
               <hr style={{ margin: '16px 0' }} />
 
               {!isRecordMonth && (
                 <div style={{ marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
+                    {t('timeline.drawer.assignDriverHeading')}
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#444', margin: '0 0 14px 0' }}>
+                    {t('timeline.drawer.assignmentHelpLine1')}
+                  </p>
+
+                  <Checkbox
+                    style={{ marginBottom: 12 }}
+                    label={t('timeline.drawer.assignOnlyThisShift')}
+                    checked={assignOnlyThisShift}
+                    onChange={(e) => setAssignOnlyThisShift(e.currentTarget.checked)}
+                  />
+
+                  <div style={{ fontSize: 13, color: '#444', marginBottom: 6 }}>
+                    {t('timeline.drawer.driver')}
+                  </div>
+
                   <Select
                     aria-label={t('timeline.drawer.assignDriver')}
                     data={driverSelectOptions.length ? driverSelectOptions : fallbackDrivers}
                     value={editedDriverId}
                     onChange={setEditedDriverId}
-                    placeholder={t('timeline.drawer.assignDriver')}
+                    placeholder={t('common.unassigned')}
                     clearable={false}
-                    size="lg"
+                    leftSection={<IconUser size={16} />}
                     renderOption={({ option, checked }) => {
                       const full = driverById.get(String(option.value)) || option;
                       const name = String(full?.name || full?.label || option.label || '').trim();
@@ -1478,7 +1553,7 @@ export default function Timeline({
                           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div
                               style={{
-                                fontSize: 16,
+                                fontSize: 15,
                                 lineHeight: 1.25,
                                 fontWeight: 500,
                                 whiteSpace: 'nowrap',
@@ -1491,7 +1566,7 @@ export default function Timeline({
                             {email ? (
                               <div
                                 style={{
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   lineHeight: 1.1,
                                   color: '#868e96',
                                   whiteSpace: 'nowrap',
@@ -1510,127 +1585,40 @@ export default function Timeline({
                       );
                     }}
                     styles={{
-                      input: { minHeight: 46, fontSize: 16 },
-                      option: { paddingTop: 12, paddingBottom: 12 },
+                      option: { paddingTop: 10, paddingBottom: 10 },
                     }}
-                    mt="sm"
                   />
 
-                  <Checkbox
-                    style={{ marginTop: 10 }}
-                    label={t('timeline.drawer.assignOnlyThisShift')}
-                    checked={assignOnlyThisShift}
-                    onChange={(e) => setAssignOnlyThisShift(e.currentTarget.checked)}
-                  />
-
-                  <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
-                    <Button
-                      loading={isAssigning}
-                      disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
-                      onClick={() => setAssignReviewOpened(true)}
-                    >
-                      {t('timeline.drawer.assignButton')}
-                    </Button>
-                  </div>
-
-                  <Modal
-                    opened={assignReviewOpened}
-                    onClose={() => setAssignReviewOpened(false)}
-                    title={t('timeline.drawer.reviewAssignmentTitle')}
-                    centered
-                  >
-                  {(() => {
-                    const isUnassign = String(editedDriverId || '').trim() === 'unassigned';
-                    const opt = editedDriverId ? driverById.get(String(editedDriverId)) : null;
-                    const displayName =
-                      isUnassign
-                        ? t('common.unassigned')
-                        : opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || '';
-
-                    const shiftRoute = String(selectedShift?.route || '').trim();
-                    const normalizedType = selectedShift ? normalizeShiftType(selectedShift) : '';
-                    const baseTypeLabel = normalizedType
-                      ? getShiftTypeLabel(selectedShift, normalizedType)
-                      : String(selectedShift?.shiftType || '').trim();
-                    const shiftTypeLabel =
-                      normalizedType === 'evening' && isDinnerShift(selectedShift)
-                        ? 'Dinner shift'
-                        : baseTypeLabel;
-                    const shiftTime = String(selectedShift?.time || '').trim();
-
-                    const iso = String(selectedShift?.date || '').slice(0, 10);
-                    const selectedDate = iso ? parseISO(iso) : null;
-
-                    const day2 = (d) => d.toLocaleDateString(locale, { day: '2-digit' });
-                    const monthLong2 = (d) => monthLong(d);
-                    const dowShort = (d) => weekdayShort(d);
-
-                    const formatRangeHuman = (start, end) => {
-                      const sameMonth =
-                        start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
-                      const datePart = sameMonth
-                        ? `${day2(start)}–${day2(end)} ${monthLong2(end)}`
-                        : `${day2(start)} ${monthLong2(start)} – ${day2(end)} ${monthLong2(end)}`;
-                      return `${datePart} (${dowShort(start)}–${dowShort(end)})`;
-                    };
-
-                    let scopeText = assignOnlyThisShift ? t('timeline.drawer.thisShiftOnly') : t('timeline.drawer.wholeWeek');
-                    if (selectedDate && !Number.isNaN(selectedDate.getTime())) {
-                      if (assignOnlyThisShift) {
-                        scopeText = `${day2(selectedDate)} ${monthLong2(selectedDate)} (${dowShort(selectedDate)})`;
-                      } else {
-                        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-                        const dow = selectedDate.getDay();
-                        const isWeekend = dow === 0 || dow === 6;
-                        const rangeStart = isWeekend ? addDays(weekStart, 5) : weekStart;
-                        const rangeEnd = isWeekend ? addDays(weekStart, 6) : addDays(weekStart, 4);
-                        scopeText = formatRangeHuman(rangeStart, rangeEnd);
-                      }
-                    }
-
-                    const shiftLabel = [shiftRoute, shiftTypeLabel].filter(Boolean).join(' ').trim();
-
-                    return (
-                      <div style={{ display: 'grid', gap: 12 }}>
-                        <div style={{ fontSize: 13, color: '#33363E', lineHeight: 1.35 }}>
-                          <div>
-                            <strong>{t('timeline.drawer.driver')}:</strong> {displayName || '—'}
-                          </div>
-                          <div>
-                            <strong>{t('timeline.drawer.shift')}:</strong> {shiftLabel || '—'}
-                            {shiftTime ? `; ${shiftTime}` : ''}
-                          </div>
-                          <div>
-                            <strong>{t('timeline.drawer.scope')}:</strong> {scopeText}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
+                    {(() => {
+                      const isUnassign = String(editedDriverId || '').trim() === 'unassigned';
+                      const opt = editedDriverId ? driverById.get(String(editedDriverId)) : null;
+                      const driverName = opt?.name || (opt?.label ? String(opt.label).split(' (')[0] : '') || '';
+                      const assignLabel = isUnassign
+                        ? t('timeline.drawer.unassign')
+                        : driverName
+                        ? `${t('timeline.drawer.assignButton')} ${driverName}`
+                        : t('timeline.drawer.assignButton');
+                      return (
+                        <>
+                          <Button
+                            loading={isAssigning && assigningMode === 'assign'}
+                            disabled={isAssigning || !selectedShiftToken || !editedDriverId || Boolean(selectedShift?.manual)}
+                            onClick={() => runAssignment({ withEmail: false })}
+                          >
+                            {assignLabel}
+                          </Button>
                           <Button
                             variant="outline"
                             loading={isAssigning && assigningMode === 'request'}
-                            disabled={isAssigning || isUnassign}
+                            disabled={isAssigning || !editedDriverId || isUnassign || Boolean(selectedShift?.manual)}
                             onClick={() => runAssignment({ withEmail: true })}
                           >
-                            {t('timeline.drawer.sendRequest')}
+                            {t('timeline.drawer.sendConfirmationEmail')}
                           </Button>
-                          <Button
-                            loading={isAssigning && assigningMode === 'assign'}
-                            disabled={isAssigning}
-                            onClick={() => runAssignment({ withEmail: false })}
-                          >
-                            {isUnassign ? t('timeline.drawer.unassign') : t('timeline.drawer.assignNow')}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  </Modal>
-
-                  <div style={{ marginTop: 12, fontSize: 12, color: '#33363E' }}>
-                    {t('timeline.drawer.assignmentHelpLine1')}
-                    <br />
-                    {t('timeline.drawer.assignmentHelpLine2')}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {selectedShift?.manual && (
@@ -1648,104 +1636,6 @@ export default function Timeline({
               )}
 
               <hr style={{ margin: '16px 0' }} />
-
-              {existingNote ? (
-                <>
-                  <div
-                    style={{
-                      background: '#fff3bf',
-                      border: '1px solid #ffe066',
-                      borderRadius: 6,
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                    }}
-                    onClick={() => setShowNotes((v) => !v)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <strong style={{ fontSize: 13 }}>{t('timeline.drawer.notesForThisShift', { count: 1 })}</strong>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', color: '#444' }}>
-                        {showNotes ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
-                      </span>
-                    </div>
-                  </div>
-
-                  {showNotes && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ padding: 8, background: '#fff', borderRadius: 6 }}>
-                        <p style={{ margin: 0, fontSize: 13 }}>{existingNote}</p>
-                      </div>
-
-                      {!isRecordMonth && !isEditingNote && (
-                        <div style={{ marginTop: 8 }}>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            style={{ height: 24, padding: '0 8px' }}
-                            onClick={() => { 
-                              setIsEditingNote(true); 
-                              setEditedNote(existingNote); 
-                            }}
-                          >
-                            {t('timeline.drawer.edit')}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              ) : (
-                !isRecordMonth ? (
-                  <Button
-                    variant="subtle"
-                    onClick={() => { 
-                      setIsEditingNote(true); 
-                      setEditedNote(''); 
-                    }}
-                  >
-                    {t('timeline.drawer.addNote')}
-                  </Button>
-                ) : null
-              )}
-
-              {!isRecordMonth && isEditingNote && (
-                <div style={{ marginTop: 8 }}>
-                  <textarea
-                    value={editedNote}
-                    onChange={(e) => setEditedNote(e.target.value)}
-                    placeholder={t('timeline.drawer.notesPlaceholder')}
-                    style={{
-                      width: '100%',
-                      minHeight: 80,
-                      padding: 8,
-                      fontSize: 13,
-                    }}
-                  />
-                  <div style={{ marginTop: 12 }}>
-                    <Button
-                      mt="md"
-                      onClick={() => {
-                        setShifts(prev => {
-                          const newShifts = prev.map(s =>
-                            s.token === selectedShiftToken
-                              ? { ...s, note: editedNote.trim() }
-                              : s
-                          );
-                          // No need to update selectedShiftToken, just keep drawer open
-                          return newShifts;
-                        });
-                        setIsEditingNote(false);
-                        if (editedNote.trim()) setShowNotes(true);
-                      }}
-                    >
-                      {t('timeline.drawer.saveChanges')}
-                    </Button>
-                  </div>
-                </div>
-              )}
 
               <h4 style={{ marginBottom: 8, marginTop: 24 }}>{t('timeline.drawer.trips')}</h4>
 

@@ -1,6 +1,6 @@
 import { getGraphAppToken } from './graphAuth';
 import { graphGet } from './graphClient';
-import { getGraphConfig, getListIds, getShiftInstancesFieldNames } from './msListsConfig';
+import { getGraphConfig, getListIds, getShiftInstancesFieldNames, getBusesFieldNames } from './msListsConfig';
 import { optionalEnv } from '../utils/env';
 
 type GraphList = {
@@ -144,19 +144,23 @@ export async function listBuses(): Promise<Array<{ id: string; title: string; ro
     .map(asString)
     .filter((id) => id && !isNaN(Number(id)));
 
+  const busFields = getBusesFieldNames();
+
   // Map of busId -> bus title
   const busIdToTitle = new Map<string, string>();
   for (const item of allItems) {
+    const f = item.fields || {};
     const title =
-      asString(item.fields?.Plate) ||
-      asString(item.fields?.plate) ||
-      asString(item.fields?.LicensePlate) ||
-      asString(item.fields?.licensePlate) ||
-      asString(item.fields?.Registration) ||
-      asString(item.fields?.registration) ||
-      asString(item.fields?.Title) ||
-      asString(item.fields?.LinkTitle) ||
-      asString(item.fields?.Name) ||
+      (busFields.plate ? asString(f[busFields.plate]) : '') ||
+      asString(f.Plate) ||
+      asString(f.plate) ||
+      asString(f.LicensePlate) ||
+      asString(f.licensePlate) ||
+      asString(f.Registration) ||
+      asString(f.registration) ||
+      asString(f.Title) ||
+      asString(f.LinkTitle) ||
+      asString(f.Name) ||
       '';
     busIdToTitle.set(String(item.id || ''), title.trim() || String(item.id || ''));
   }

@@ -57,6 +57,14 @@ export function getDriversFieldNames() {
   };
 }
 
+export function getBusesFieldNames() {
+  return {
+    // Internal column name for the license plate field in the Buses list.
+    // Override with BUSES_FIELD_PLATE if your list uses a non-standard name (e.g. "field_1").
+    plate: optionalEnv('BUSES_FIELD_PLATE', ''),
+  };
+}
+
 export function getShiftPatternsFieldNames() {
   return {
     route: optionalEnv('PATTERN_FIELD_ROUTE', 'route'),
@@ -75,5 +83,12 @@ export function getShiftPatternsFieldNames() {
     // If your internal column name differs, override via PATTERN_FIELD_WORKSPACE_ID.
     workspaceId: optionalEnv('PATTERN_FIELD_WORKSPACE_ID', 'workspaceId'),
     templateId: optionalEnv('PATTERN_FIELD_TEMPLATE_ID', ''),
+
+    // Seasonal pattern support: season label, active date range, shift mode variant, and trips data
+    season: optionalEnv('PATTERN_FIELD_SEASON', 'season'),
+    effectiveFrom: optionalEnv('PATTERN_FIELD_EFFECTIVE_FROM', 'effectiveFrom'),
+    effectiveTo: optionalEnv('PATTERN_FIELD_EFFECTIVE_TO', 'effectiveTo'),
+    shiftMode: optionalEnv('PATTERN_FIELD_SHIFT_MODE', 'shiftMode'),
+    trips: optionalEnv('PATTERN_FIELD_TRIPS', 'trips'),
   };
 }

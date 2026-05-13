@@ -52,6 +52,8 @@ export const translations = {
         route: 'Route',
         routeName: 'Route name',
         shiftType: 'Shift type',
+        duration: 'Duration',
+        licensePlate: 'License plate',
         time: 'Time',
         driver: 'Driver',
         scope: 'Scope',
@@ -65,8 +67,10 @@ export const translations = {
 
         busesUsed: 'Buses used',
         assignDriver: 'Assign driver',
-        assignOnlyThisShift: 'Assign only this shift',
-        assignButton: 'Assign…',
+        assignDriverHeading: 'Assign a driver',
+        assignOnlyThisShift: 'Assign to this shift only',
+        assignButton: 'Assign',
+        sendConfirmationEmail: 'Send confirmation email',
         reviewAssignmentTitle: 'Review assignment',
         recordReadOnly: 'This month is a historical record. Assignments, notes, and manual changes are disabled.',
 
@@ -256,6 +260,8 @@ export const translations = {
       route: 'Leið',
       routeName: 'Heiti leiðar',
       shiftType: 'Tegund vaktar',
+      duration: 'Lengd',
+      licensePlate: 'Skráning bíls',
       time: 'Tími',
       driver: 'Bílstjóri',
       scope: 'Gildissvið',
@@ -269,8 +275,10 @@ export const translations = {
 
       busesUsed: 'Notaðir bílar',
       assignDriver: 'Úthluta bílstjóra',
+      assignDriverHeading: 'Úthluta bílstjóra',
       assignOnlyThisShift: 'Úthluta aðeins þessari vakt',
-      assignButton: 'Úthluta…',
+      assignButton: 'Úthluta',
+      sendConfirmationEmail: 'Senda staðfestingarpóst',
       reviewAssignmentTitle: 'Yfirfara úthlutun',
       recordReadOnly: 'Þessi mánuður er söguleg skrá. Úthlutanir, athugasemdir og handvirkar breytingar eru óvirkar.',
 

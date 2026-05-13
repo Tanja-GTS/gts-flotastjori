@@ -53,6 +53,7 @@ export type HydratedShiftDto = {
   shiftType: string;
   // Optional label from the pattern (ex: "weekdays" / "weekend")
   weekPart?: string;
+  season?: string;
   name: string;
   time: string; // "HH:mm–HH:mm"
   defaultBus?: string;
@@ -753,9 +754,10 @@ function buildInvalidPatternSummary(workspaceId: string, patterns: ShiftPatternD
 
 async function loadPatternsForGeneration(params: {
   workspaceId: string;
+  month: string;
   strict: boolean;
 }): Promise<{ patterns: ShiftPatternDto[]; warnings: string[] }> {
-  const patternsAll = await listShiftPatterns({ workspaceId: params.workspaceId, includeInvalid: true });
+  const patternsAll = await listShiftPatterns({ workspaceId: params.workspaceId, includeInvalid: true, month: params.month });
   const warnings: string[] = [];
 
   if (patternsAll.length === 0) {
@@ -857,7 +859,7 @@ async function createMissingShiftInstances(params: {
 
   const workspaceCol = await getWorkspaceColumnInfo();
   const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
-  const { patterns, warnings } = await loadPatternsForGeneration({ workspaceId, strict });
+  const { patterns, warnings } = await loadPatternsForGeneration({ workspaceId, month, strict });
 
   if (patterns.length === 0) return { created: 0, skipped: 0, warnings };
 
@@ -1154,11 +1156,12 @@ export async function listHydratedShifts(params: {
   const instances = await listShiftInstances(params);
 
   // Build a pattern lookup map.
-  // IMPORTANT: don't scope patterns by workspace here.
-  // Instances can legitimately reference patterns whose workspaceId differs (ex: older generated items,
-  // manual items, or when patterns haven't been re-tagged yet). If we scope patterns here,
-  // shifts silently disappear for that workspace because hydration can't find the pattern.
-  const patterns = await listShiftPatterns({});
+  // IMPORTANT: don't scope patterns by workspace here — instances can reference patterns from a
+  // different workspace (older generated items, manual items, untagged patterns). Scoping by
+  // workspace would silently hide those shifts.
+  // DO apply date-based filtering when a month is provided so seasonal patterns (e.g. Summer
+  // Schedule) are hidden for months outside their effectiveFrom/effectiveTo window.
+  const patterns = await listShiftPatterns({ month: params.month });
   const byId = new Map(patterns.map((p) => [p.id, p]));
 
   const busIds = instances.map((i) => i.busId).filter((v): v is string => Boolean(v));
@@ -1211,6 +1214,7 @@ export async function listHydratedShifts(params: {
         // For the current UI, we still call this "defaultBus".
         defaultBus: inst.busId ? busTitles.get(inst.busId) || inst.busId : undefined,
         trips: inst.templateId ? tripsByTemplateId.get(inst.templateId) || [] : [],
+        season: pattern.season,
       };
 
       if (patternWorkspaceId) base.patternWorkspaceId = patternWorkspaceId;
