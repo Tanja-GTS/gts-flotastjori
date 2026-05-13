@@ -70,6 +70,10 @@ services:
       - key: DEFAULT_BUS_LOOKUP_ID
         sync: false
 
+      # Buses list: internal column name for the license plate field
+      - key: BUSES_FIELD_PLATE
+        value: "field_1"
+
       # ShiftInstances column internal-name overrides (Microsoft Lists often uses field_#)
       - key: LIST_FIELD_WORKSPACE_ID
         sync: false
