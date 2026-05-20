@@ -69,25 +69,30 @@ export async function getShifts(req: Request, res: Response) {
       }
     }
 
+    const t0 = Date.now();
     const shifts = await cacheGetOrSet({
       key: cacheKey,
       ttlMs: SHIFTS_TTL_MS,
       factory: async () => {
+        const ft0 = Date.now();
         let prefetchedInstances;
         if (AUTO_GENERATE_ON_READ && workspaceId && month) {
           const result = await ensureShiftInstancesForMonth({ workspaceId, month });
+          console.log(`[shifts] ensureShiftInstances ${workspaceId} ${month}: ${Date.now() - ft0}ms (created=${result.created}, found=${result.instances.length})`);
           if (result.warnings.length > 0) {
             console.warn(
               `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
             );
           }
-          // Reuse the instances already fetched by ensureShiftInstancesForMonth.
-          // Only skip re-fetching when nothing was created — new instances won't be in the prefetched list.
           if (result.created === 0) prefetchedInstances = result.instances;
         }
-        return listHydratedShifts({ month, workspaceId, prefetchedInstances });
+        const ht0 = Date.now();
+        const hydrated = await listHydratedShifts({ month, workspaceId, prefetchedInstances });
+        console.log(`[shifts] hydrate ${workspaceId} ${month}: ${Date.now() - ht0}ms → total factory ${Date.now() - ft0}ms`);
+        return hydrated;
       },
     });
+    console.log(`[shifts] GET ${workspaceId} ${month}: ${Date.now() - t0}ms (cached=${Date.now() - t0 < 5})`);
     res.json({ ok: true, shifts });
   } catch (err) {
     sendApiError(res, err);
