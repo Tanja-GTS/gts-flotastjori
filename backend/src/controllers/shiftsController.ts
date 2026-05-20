@@ -73,6 +73,7 @@ export async function getShifts(req: Request, res: Response) {
       key: cacheKey,
       ttlMs: SHIFTS_TTL_MS,
       factory: async () => {
+        let prefetchedInstances;
         if (AUTO_GENERATE_ON_READ && workspaceId && month) {
           const result = await ensureShiftInstancesForMonth({ workspaceId, month });
           if (result.warnings.length > 0) {
@@ -80,8 +81,11 @@ export async function getShifts(req: Request, res: Response) {
               `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
             );
           }
+          // Reuse the instances already fetched by ensureShiftInstancesForMonth.
+          // Only skip re-fetching when nothing was created — new instances won't be in the prefetched list.
+          if (result.created === 0) prefetchedInstances = result.instances;
         }
-        return listHydratedShifts({ month, workspaceId });
+        return listHydratedShifts({ month, workspaceId, prefetchedInstances });
       },
     });
     res.json({ ok: true, shifts });

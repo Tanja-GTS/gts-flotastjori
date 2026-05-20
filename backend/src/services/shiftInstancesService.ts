@@ -849,7 +849,7 @@ async function createMissingShiftInstances(params: {
   workspaceId: string;
   month: string;
   strict: boolean;
-}): Promise<{ created: number; skipped: number; warnings: string[] }> {
+}): Promise<{ created: number; skipped: number; warnings: string[]; instances: ShiftInstanceDto[] }> {
   const { workspaceId, month, strict } = params;
 
   const graph = getGraphConfig();
@@ -861,7 +861,7 @@ async function createMissingShiftInstances(params: {
   const workspaceMaps = workspaceCol.kind === 'lookup' ? await getWorkspaceMaps() : undefined;
   const { patterns, warnings } = await loadPatternsForGeneration({ workspaceId, month, strict });
 
-  if (patterns.length === 0) return { created: 0, skipped: 0, warnings };
+  if (patterns.length === 0) return { created: 0, skipped: 0, warnings, instances: [] };
 
   const existing = await listShiftInstances({ workspaceId, month });
   const existingKeys = new Set(
@@ -927,7 +927,7 @@ async function createMissingShiftInstances(params: {
             `Add the workspace to the Workspaces list (Title = slug), or switch the ShiftInstances workspace column back to Text/Choice.`;
           if (strict) throw new Error(message);
           warnings.push(message);
-          return { created, skipped, warnings };
+          return { created, skipped, warnings, instances: existing };
         }
         fields[`${fInst.workspaceId}LookupId`] = Number(spId);
       } else {
@@ -958,7 +958,7 @@ async function createMissingShiftInstances(params: {
     },
   });
 
-  return { created, skipped, warnings };
+  return { created, skipped, warnings, instances: existing };
 }
 
 export async function generateShiftInstances(params: {
@@ -976,7 +976,7 @@ export async function generateShiftInstances(params: {
 export async function ensureShiftInstancesForMonth(params: {
   workspaceId: string;
   month: string;
-}): Promise<{ created: number; skipped: number; warnings: string[] }> {
+}): Promise<{ created: number; skipped: number; warnings: string[]; instances: ShiftInstanceDto[] }> {
   return createMissingShiftInstances({
     workspaceId: params.workspaceId,
     month: params.month,
@@ -1151,6 +1151,7 @@ export async function previewShiftGeneration(params: {
 export async function listHydratedShifts(params: {
   workspaceId?: string;
   month?: string;
+  prefetchedInstances?: ShiftInstanceDto[];
 }): Promise<HydratedShiftDto[]> {
   const requestedWorkspaceId = normalizeWorkspaceSlug(params.workspaceId);
 
@@ -1161,7 +1162,7 @@ export async function listHydratedShifts(params: {
   // DO apply date-based filtering when a month is provided so seasonal patterns (e.g. Summer
   // Schedule) are hidden for months outside their effectiveFrom/effectiveTo window.
   const [instances, patterns] = await Promise.all([
-    listShiftInstances(params),
+    params.prefetchedInstances ? Promise.resolve(params.prefetchedInstances) : listShiftInstances(params),
     listShiftPatterns({ month: params.month }),
   ]);
   const byId = new Map(patterns.map((p) => [p.id, p]));
