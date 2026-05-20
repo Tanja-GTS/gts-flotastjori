@@ -10,6 +10,7 @@
     "generate:shifts": "tsx src/scripts/generateShiftsCli.ts",
     "timon:sync": "tsx src/scripts/timonSyncCli.ts",
     "backup:lists": "tsx src/scripts/backupListsCli.ts",
+    "warmup:cache": "tsx src/scripts/warmupCache.ts",
     "start": "tsx src/server.ts",
     "start:prod": "SERVE_FRONTEND=true tsx src/server.ts",
     "render:build": "cd .. && npm install --include=dev && npm run build && rm -rf backend/dist && cp -R dist backend/",

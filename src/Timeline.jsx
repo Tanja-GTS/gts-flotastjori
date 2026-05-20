@@ -1404,18 +1404,13 @@ export default function Timeline({
                     <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {selectedShift.routeName || selectedShift.route}
                     </div>
-                    {selectedShift.timonRouteCode ? (
-                      <div style={{ marginTop: 4, color: '#666', fontSize: 13 }}>
-                        {selectedShift.timonRouteCode}
-                      </div>
-                    ) : null}
                   </div>
                 </div>
                 {selectedShift.season ? (
                   <div
                     style={{
                       alignSelf: 'flex-start',
-                      background: '#fff3bf',
+                      background: /summer|sumar/i.test(selectedShift.season) ? '#fff3bf' : '#dbe4ff',
                       color: '#343a40',
                       borderRadius: 999,
                       padding: '8px 14px',

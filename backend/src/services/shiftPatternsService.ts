@@ -4,6 +4,7 @@ import { getGraphConfig, getListIds, getShiftPatternsFieldNames } from './msList
 import { resolveRouteTitles } from './routesService';
 import { getTemplateDefaults } from './templatesService';
 import { listWorkspaces } from './workspacesService';
+import { optionalEnv } from '../utils/env';
 
 export type ShiftPatternDto = {
   id: string;
@@ -93,6 +94,8 @@ async function readWorkspaceSlug(fields: Record<string, unknown>, internalName: 
   return '';
 }
 
+let enrichedPatternsCache: { fetchedAtMs: number; items: ShiftPatternDto[] } | null = null;
+
 function readAny(fields: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
     if (!k) continue;
@@ -168,15 +171,19 @@ function isPatternActiveForMonth(pattern: ShiftPatternDto, month: string): boole
   return true;
 }
 
-export async function listShiftPatterns(params?: {
-  workspaceId?: string;
-  includeInvalid?: boolean;
-  month?: string; // Optional: YYYY-MM format for seasonal filtering during generation
-}): Promise<ShiftPatternDto[]> {
+// Fetches and enriches all patterns from SharePoint, cached for PATTERNS_CACHE_TTL_MS.
+// The result includes ALL patterns (valid + invalid, all workspaces) before any local filtering.
+// listShiftPatterns() applies the cheap local filters on top of this cache.
+async function fetchAllEnrichedPatterns(): Promise<ShiftPatternDto[]> {
+  const ttlMs = Number(optionalEnv('PATTERNS_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+  if (enrichedPatternsCache && now - enrichedPatternsCache.fetchedAtMs < ttlMs) {
+    return enrichedPatternsCache.items;
+  }
+
   const graph = getGraphConfig();
   const lists = getListIds();
   const f = getShiftPatternsFieldNames();
-
   const token = await getGraphAppToken(graph);
 
   const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
@@ -185,7 +192,6 @@ export async function listShiftPatterns(params?: {
 
   const allItems: GraphListItem[] = [];
   let nextUrl: string | undefined = baseUrl;
-
   while (nextUrl) {
     const page: GraphListItemsResponse = await graphGet<GraphListItemsResponse>(nextUrl, token);
     allItems.push(...(page.value || []));
@@ -194,102 +200,79 @@ export async function listShiftPatterns(params?: {
 
   const rawPatterns = await Promise.all(
     allItems.map(async (item) => {
-    const fields = item.fields || {};
+      const fields = item.fields || {};
 
-    // Provide sane fallbacks for common internal names in Microsoft Lists.
-    const routeValue = readAny(fields, [f.route, 'RouteLookupId', 'Route']);
-    const routeNameValue = readAny(fields, [
-      // configured internal name
-      (f as any).routeName,
-      // common defaults
-      'routeName',
-      'RouteName',
-      'routeTitle',
-      'RouteTitle',
-    ]);
-    const timonRouteCodeValue = readAny(fields, [
-      (f as any).timonRouteCode,
-      'timonRouteCode',
-      'TimonRouteCode',
-    ]);
-    const timonShiftNameValue = readAny(fields, [
-      (f as any).timonShiftName,
-      'timonShiftName',
-      'TimonShiftName',
-    ]);
-    const titleValue = readAny(fields, ['Title', 'LinkTitle', 'LinkTitleNoMenu']);
-    const dayValue = readAny(fields, [f.dayOfWeek, 'DayOfWeek']);
-    const shiftTypeValue = readAny(fields, [f.shiftType, 'Type0']);
-    const weekPartValue = readAny(fields, [
-      (f as any).weekPart,
-      // Common internal names when the display name is "ShiftType"
-      'ShiftType',
-      'WeekPart',
-      'WeekType',
-      'DayType',
-    ]);
-    const startValue = readAny(fields, [f.startTime, 'field_5', 'StartTime']);
-    const endValue = readAny(fields, [f.endTime, 'field_6', 'EndTime']);
-    const templateValue = readAny(fields, [f.templateId, 'ShiftLookupId', 'Shift']);
-    // Seasonal fields
-    const seasonValue = readAny(fields, [(f as any).season, 'Season']);
-    const effectiveFromValue = readAny(fields, [(f as any).effectiveFrom, 'EffectiveFrom']);
-    const effectiveToValue = readAny(fields, [(f as any).effectiveTo, 'EffectiveTo']);
-    const shiftModeValue = readAny(fields, [(f as any).shiftMode, 'ShiftMode']);
-    const tripsValue = readAny(fields, [(f as any).trips, 'Trips']);
+      const routeValue = readAny(fields, [f.route, 'RouteLookupId', 'Route']);
+      const routeNameValue = readAny(fields, [
+        (f as any).routeName,
+        'routeName', 'RouteName', 'routeTitle', 'RouteTitle',
+      ]);
+      const timonRouteCodeValue = readAny(fields, [
+        (f as any).timonRouteCode, 'timonRouteCode', 'TimonRouteCode',
+      ]);
+      const timonShiftNameValue = readAny(fields, [
+        (f as any).timonShiftName, 'timonShiftName', 'TimonShiftName',
+      ]);
+      const titleValue = readAny(fields, ['Title', 'LinkTitle', 'LinkTitleNoMenu']);
+      const dayValue = readAny(fields, [f.dayOfWeek, 'DayOfWeek']);
+      const shiftTypeValue = readAny(fields, [f.shiftType, 'Type0']);
+      const weekPartValue = readAny(fields, [
+        (f as any).weekPart, 'ShiftType', 'WeekPart', 'WeekType', 'DayType',
+      ]);
+      const startValue = readAny(fields, [f.startTime, 'field_5', 'StartTime']);
+      const endValue = readAny(fields, [f.endTime, 'field_6', 'EndTime']);
+      const templateValue = readAny(fields, [f.templateId, 'ShiftLookupId', 'Shift']);
+      const seasonValue = readAny(fields, [(f as any).season, 'Season']);
+      const effectiveFromValue = readAny(fields, [(f as any).effectiveFrom, 'EffectiveFrom']);
+      const effectiveToValue = readAny(fields, [(f as any).effectiveTo, 'EffectiveTo']);
+      const shiftModeValue = readAny(fields, [(f as any).shiftMode, 'ShiftMode']);
+      const tripsValue = readAny(fields, [(f as any).trips, 'Trips']);
 
-    const title = asString(titleValue).trim();
+      const title = asString(titleValue).trim();
 
-    let trips: any[] | undefined;
-    try {
-      const tripsStr = asString(tripsValue).trim();
-      trips = tripsStr ? JSON.parse(tripsStr) : undefined;
-    } catch {
-      trips = undefined;
-    }
+      let trips: any[] | undefined;
+      try {
+        const tripsStr = asString(tripsValue).trim();
+        trips = tripsStr ? JSON.parse(tripsStr) : undefined;
+      } catch {
+        trips = undefined;
+      }
 
-    const dto: ShiftPatternDto = {
-      id: item.id,
-      // For lookup columns, expanded fields usually include *LookupId*. We resolve this later.
-      route: asString(routeValue),
-      routeName: asString(routeNameValue).trim() || undefined,
-      timonRouteCode: asString(timonRouteCodeValue).trim() || undefined,
-      timonShiftName: asString(timonShiftNameValue).trim() || undefined,
-      shiftType: normalizeShiftType(asString(shiftTypeValue)),
-      weekPart: normalizeWeekPart(asString(weekPartValue)),
-      dayOfWeek: Array.isArray(dayValue) ? asStringArray(dayValue) : asString(dayValue),
-      startTime: asString(startValue),
-      endTime: asString(endValue),
-      workspaceId: f.workspaceId ? (await readWorkspaceSlug(fields, f.workspaceId)) || undefined : undefined,
-      templateId: f.templateId ? readField(fields, f.templateId) || undefined : undefined,
-      // Add seasonal fields
-      season: asString(seasonValue).trim() || undefined,
-      effectiveFrom: asString(effectiveFromValue).trim() || undefined,
-      effectiveTo: asString(effectiveToValue).trim() || undefined,
-      shiftMode: asString(shiftModeValue).trim() || undefined,
-      trips,
-    };
+      const dto: ShiftPatternDto = {
+        id: item.id,
+        route: asString(routeValue),
+        routeName: asString(routeNameValue).trim() || undefined,
+        timonRouteCode: asString(timonRouteCodeValue).trim() || undefined,
+        timonShiftName: asString(timonShiftNameValue).trim() || undefined,
+        shiftType: normalizeShiftType(asString(shiftTypeValue)),
+        weekPart: normalizeWeekPart(asString(weekPartValue)),
+        dayOfWeek: Array.isArray(dayValue) ? asStringArray(dayValue) : asString(dayValue),
+        startTime: asString(startValue),
+        endTime: asString(endValue),
+        workspaceId: f.workspaceId ? (await readWorkspaceSlug(fields, f.workspaceId)) || undefined : undefined,
+        templateId: f.templateId ? readField(fields, f.templateId) || undefined : undefined,
+        season: asString(seasonValue).trim() || undefined,
+        effectiveFrom: asString(effectiveFromValue).trim() || undefined,
+        effectiveTo: asString(effectiveToValue).trim() || undefined,
+        shiftMode: asString(shiftModeValue).trim() || undefined,
+        trips,
+      };
 
-    // If PATTERN_FIELD_TEMPLATE_ID isn't configured, fall back to the common lookup backing field.
-    if (!dto.templateId) {
-      const rawTemplate = asString(templateValue);
-      dto.templateId = rawTemplate ? rawTemplate : undefined;
-    }
+      if (!dto.templateId) {
+        const rawTemplate = asString(templateValue);
+        dto.templateId = rawTemplate ? rawTemplate : undefined;
+      }
 
-    return { dto, title };
+      return { dto, title };
     })
   );
 
-  // Prefer routeName coming from the ShiftTemplates/Templates list when available.
-  // This matches your workflow: edit templates, and have all instances/patterns pick it up.
+  // Enrich from templates (getTemplateDefaults has its own forever-lived cache per ID).
   const templateIdsNeeding = Array.from(
     new Set(
       rawPatterns
         .map((p) => p.dto)
-        .filter(
-          (p) =>
-            p.templateId && (!p.routeName || !p.timonRouteCode || !p.timonShiftName)
-        )
+        .filter((p) => p.templateId && (!p.routeName || !p.timonRouteCode || !p.timonShiftName))
         .map((p) => String(p.templateId))
     )
   );
@@ -326,22 +309,23 @@ export async function listShiftPatterns(params?: {
     } as ShiftPatternDto;
   });
 
-  // Optionally resolve route lookup IDs to their Titles (Route list).
+  // Resolve route lookup IDs -> titles.
   const routeIds = Array.from(
-    new Set(
-      enriched
-        .map((p) => p.route)
-        .filter((v) => typeof v === 'string' && v.trim().length)
-    )
+    new Set(enriched.map((p) => p.route).filter((v) => typeof v === 'string' && v.trim().length))
   );
-
   const routeTitles = await resolveRouteTitles({ routeIds });
 
-  const patternsAll = enriched
-    .map((p) => ({
-      ...p,
-      route: routeTitles.get(p.route) || p.route,
-    }));
+  const items = enriched.map((p) => ({ ...p, route: routeTitles.get(p.route) || p.route }));
+  enrichedPatternsCache = { fetchedAtMs: now, items };
+  return items;
+}
+
+export async function listShiftPatterns(params?: {
+  workspaceId?: string;
+  includeInvalid?: boolean;
+  month?: string;
+}): Promise<ShiftPatternDto[]> {
+  const patternsAll = await fetchAllEnrichedPatterns();
 
   const patternsValid = patternsAll.filter((p) => {
     const hasDay = Array.isArray(p.dayOfWeek) ? p.dayOfWeek.length > 0 : Boolean(p.dayOfWeek);
@@ -350,24 +334,17 @@ export async function listShiftPatterns(params?: {
 
   const patterns = params?.includeInvalid ? patternsAll : patternsValid;
 
-  // Apply date-based filtering if month is provided (used during generation)
   const month = (params as any)?.month;
   const dateFiltered = month
     ? patterns.filter((p) => isPatternActiveForMonth(p, month))
     : patterns;
 
   if (params?.workspaceId) {
-    // Only filter by workspace if the column exists / is configured
     const canFilter = dateFiltered.some((p) => p.workspaceId != null);
     if (canFilter) {
       const wanted = String(params.workspaceId || '').trim();
       const scoped = dateFiltered.filter((p) => String(p.workspaceId || '').trim() === wanted);
-
-      // If the workspace has explicit patterns, use them.
       if (scoped.length > 0) return scoped;
-
-      // Otherwise, fall back to global patterns (no workspaceId).
-      // This makes "new workspace" usable immediately without requiring code changes.
       return dateFiltered.filter((p) => p.workspaceId == null);
     }
   }

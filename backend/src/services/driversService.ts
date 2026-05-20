@@ -193,12 +193,18 @@ function pickPhone(fields: Record<string, unknown>): string {
   return '';
 }
 
+let driversCache: { fetchedAtMs: number; items: DriverDto[] } | null = null;
+
 /**
  * Lists drivers from the Drivers list.
  *
  * The listId is auto-discovered from the ShiftInstances driverId lookup when possible.
  */
 export async function listDrivers(): Promise<DriverDto[]> {
+  const ttlMs = Number(optionalEnv('DRIVERS_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+  if (driversCache && now - driversCache.fetchedAtMs < ttlMs) return driversCache.items;
+
   const driversListId = await getDriversListId();
   if (!driversListId) return [];
 
@@ -218,7 +224,7 @@ export async function listDrivers(): Promise<DriverDto[]> {
     nextUrl = page['@odata.nextLink'];
   }
 
-  return allItems
+  const items = allItems
     .map((item) => {
       const fields = item.fields || {};
       const name =
@@ -241,6 +247,8 @@ export async function listDrivers(): Promise<DriverDto[]> {
       };
     })
     .filter((d) => d.id && d.name);
+  driversCache = { fetchedAtMs: now, items };
+  return items;
 }
 
 export async function resolveDrivers(params: {

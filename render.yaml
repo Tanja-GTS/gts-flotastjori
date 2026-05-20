@@ -241,3 +241,17 @@ services:
         value: "0"
       - key: TIMON_SYNC_DRY_RUN
         value: "false"
+
+  - type: cron
+    name: fleet-scheduler-cache-warmup
+    env: node
+    plan: starter
+    rootDir: .
+    # 5:55 AM UTC = ~5 minutes before fleet managers arrive at 6 AM (Iceland is UTC+0 year-round).
+    # Wakes the web service from Render's idle sleep and pre-populates the in-memory shift cache.
+    schedule: "55 5 * * *"
+    buildCommand: npm install --include=dev && npm run render:build
+    startCommand: npm --prefix backend run warmup:cache
+    envVars:
+      - key: APP_ORIGIN
+        value: https://gts-flotastjori.onrender.com

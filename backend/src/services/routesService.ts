@@ -18,6 +18,8 @@ function asString(value: unknown): string {
   return String(value);
 }
 
+let routeTitlesCache: { fetchedAtMs: number; map: Map<string, string> } | null = null;
+
 /**
  * Resolves Route lookup IDs -> Route Title.
  *
@@ -30,15 +32,27 @@ export async function resolveRouteTitles(params: {
   const routesListId = optionalEnv('MS_ROUTES_LIST_ID', '').trim();
   if (!routesListId) return new Map();
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
-
   const uniqueIds = Array.from(new Set(params.routeIds.map((s) => String(s).trim()).filter(Boolean)));
   if (uniqueIds.length === 0) return new Map();
 
-    const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-      graph.siteId
-    )}/lists/${encodeURIComponent(routesListId)}/items?$expand=fields&$top=999`;
+  const ttlMs = Number(optionalEnv('ROUTES_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+  if (routeTitlesCache && now - routeTitlesCache.fetchedAtMs < ttlMs) {
+    // Filter cached map to only requested IDs.
+    const filtered = new Map<string, string>();
+    for (const id of uniqueIds) {
+      const title = routeTitlesCache.map.get(id);
+      if (title) filtered.set(id, title);
+    }
+    return filtered;
+  }
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+
+  const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(routesListId)}/items?$expand=fields&$top=999`;
 
   const allItems: GraphListItem[] = [];
   let nextUrl: string | undefined = baseUrl;
@@ -49,15 +63,19 @@ export async function resolveRouteTitles(params: {
     nextUrl = page['@odata.nextLink'];
   }
 
-  const map = new Map<string, string>();
+  const fullMap = new Map<string, string>();
   for (const item of allItems) {
     const id = String(item.id || '').trim();
     if (!id) continue;
-    if (!uniqueIds.includes(id)) continue;
-
     const title = asString(item.fields?.Title) || asString(item.fields?.LinkTitle) || '';
-    if (title) map.set(id, title);
+    if (title) fullMap.set(id, title);
   }
+  routeTitlesCache = { fetchedAtMs: now, map: fullMap };
 
-  return map;
+  const filtered = new Map<string, string>();
+  for (const id of uniqueIds) {
+    const title = fullMap.get(id);
+    if (title) filtered.set(id, title);
+  }
+  return filtered;
 }

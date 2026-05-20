@@ -41,15 +41,6 @@ export async function getShifts(req: Request, res: Response) {
     }
 
     const cacheKey = `shifts|${workspaceId || 'all'}|${month || 'all'}`;
-    if (AUTO_GENERATE_ON_READ && workspaceId && month) {
-      const result = await ensureShiftInstancesForMonth({ workspaceId, month });
-      if (result.created > 0) cacheInvalidatePrefix(cacheKey);
-      if (result.warnings.length > 0) {
-        console.warn(
-          `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
-        );
-      }
-    }
 
     if (AUTO_TIMON_SYNC_ON_READ && workspaceId && month) {
       const range = monthDateRange(month);
@@ -81,7 +72,17 @@ export async function getShifts(req: Request, res: Response) {
     const shifts = await cacheGetOrSet({
       key: cacheKey,
       ttlMs: SHIFTS_TTL_MS,
-      factory: () => listHydratedShifts({ month, workspaceId }),
+      factory: async () => {
+        if (AUTO_GENERATE_ON_READ && workspaceId && month) {
+          const result = await ensureShiftInstancesForMonth({ workspaceId, month });
+          if (result.warnings.length > 0) {
+            console.warn(
+              `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
+            );
+          }
+        }
+        return listHydratedShifts({ month, workspaceId });
+      },
     });
     res.json({ ok: true, shifts });
   } catch (err) {

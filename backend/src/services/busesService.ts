@@ -108,13 +108,20 @@ async function getBusesListId(): Promise<string> {
   return inferBusesListIdFromSiteLists();
 }
 
+type BusEntry = { id: string; title: string; routeId?: string; routeLabel?: string };
+let busesCache: { fetchedAtMs: number; items: BusEntry[] } | null = null;
+
 /**
  * Lists buses from the Buses list.
  *
  * This expects MS_BUSES_LIST_ID to be set to the list ID referenced by bus lookups.
  * If not set, returns an empty list.
  */
-export async function listBuses(): Promise<Array<{ id: string; title: string; routeId?: string; routeLabel?: string }>> {
+export async function listBuses(): Promise<BusEntry[]> {
+  const ttlMs = Number(optionalEnv('BUSES_CACHE_TTL_MS', '300000')) || 300000;
+  const now = Date.now();
+  if (busesCache && now - busesCache.fetchedAtMs < ttlMs) return busesCache.items;
+
   const busesListId = await getBusesListId();
   if (!busesListId) return [];
 
@@ -191,6 +198,7 @@ export async function listBuses(): Promise<Array<{ id: string; title: string; ro
     // eslint-disable-next-line no-console
     console.log('[listBuses] debug:', JSON.stringify(debug, null, 2));
   }
+  busesCache = { fetchedAtMs: now, items: result };
   return result;
 }
 

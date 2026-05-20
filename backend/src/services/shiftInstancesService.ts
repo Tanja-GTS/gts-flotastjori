@@ -1153,25 +1153,29 @@ export async function listHydratedShifts(params: {
   month?: string;
 }): Promise<HydratedShiftDto[]> {
   const requestedWorkspaceId = normalizeWorkspaceSlug(params.workspaceId);
-  const instances = await listShiftInstances(params);
 
-  // Build a pattern lookup map.
+  // Fetch instances and patterns in parallel — they are fully independent.
   // IMPORTANT: don't scope patterns by workspace here — instances can reference patterns from a
   // different workspace (older generated items, manual items, untagged patterns). Scoping by
   // workspace would silently hide those shifts.
   // DO apply date-based filtering when a month is provided so seasonal patterns (e.g. Summer
   // Schedule) are hidden for months outside their effectiveFrom/effectiveTo window.
-  const patterns = await listShiftPatterns({ month: params.month });
+  const [instances, patterns] = await Promise.all([
+    listShiftInstances(params),
+    listShiftPatterns({ month: params.month }),
+  ]);
   const byId = new Map(patterns.map((p) => [p.id, p]));
 
   const busIds = instances.map((i) => i.busId).filter((v): v is string => Boolean(v));
-  const busTitles = await resolveBusTitles({ busIds });
-
   const driverIds = instances.map((i) => i.driverId).filter((v): v is string => Boolean(v));
-  const driversById = await resolveDrivers({ driverIds });
-
   const templateIds = instances.map((i) => i.templateId).filter((v): v is string => Boolean(v));
-  const tripsByTemplateId = await getTripsForTemplateIds({ templateIds });
+
+  // All three lookups are independent once we have the IDs.
+  const [busTitles, driversById, tripsByTemplateId] = await Promise.all([
+    resolveBusTitles({ busIds }),
+    resolveDrivers({ driverIds }),
+    getTripsForTemplateIds({ templateIds }),
+  ]);
 
   const hydrated = instances
     .map((inst): HydratedShiftDto | null => {
