@@ -1,6 +1,7 @@
 import { getGraphAppToken } from './graphAuth';
 import { graphGet } from './graphClient';
 import { getGraphConfig, getListIds } from './msListsConfig';
+import { getBusesListId } from './busesService';
 
 type GraphList = {
   id: string;
@@ -34,9 +35,9 @@ type GraphListItemsResponse = {
   value: GraphListItem[];
 };
 
-export type DebugListKey = 'patterns' | 'instances';
+export type DebugListKey = 'patterns' | 'instances' | 'buses';
 
-function resolveListId(list: DebugListKey): string {
+function resolveListId(list: Exclude<DebugListKey, 'buses'>): string {
   const ids = getListIds();
   if (list === 'patterns') return ids.shiftPatternsListId;
   return ids.shiftInstancesListId;
@@ -129,7 +130,10 @@ export async function getListFieldDiagnostics(params: {
   list: DebugListKey;
   sample?: number;
 }) {
-  const listId = resolveListId(params.list);
+  const listId =
+    params.list === 'buses'
+      ? await getBusesListId()
+      : resolveListId(params.list);
   return getListFieldDiagnosticsByListId({
     listId,
     sample: params.sample,

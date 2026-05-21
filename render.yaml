@@ -147,6 +147,8 @@ services:
         sync: false
       - key: MS_SHIFT_PATTERNS_LIST_ID
         sync: false
+      - key: MS_BUSES_LIST_ID
+        sync: false
       - key: MS_ROUTES_LIST_ID
         sync: false
       - key: MS_TEMPLATES_LIST_ID

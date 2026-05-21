@@ -5,7 +5,7 @@ import { sendApiError } from './apiError';
 import { bearerFromHeader, publicDebugEndpointsEnabled } from '../middleware/entraAuth';
 
 function isDebugListKey(value: unknown): value is DebugListKey {
-  return value === 'patterns' || value === 'instances';
+  return value === 'patterns' || value === 'instances' || value === 'buses';
 }
 
 export async function getListFieldsDebug(req: Request, res: Response) {
@@ -16,7 +16,7 @@ export async function getListFieldsDebug(req: Request, res: Response) {
     if (!isDebugListKey(list)) {
       return res.status(400).json({
         ok: false,
-        error: 'Invalid list. Use ?list=patterns or ?list=instances',
+        error: 'Invalid list. Use ?list=patterns, ?list=instances, or ?list=buses',
       });
     }
 

@@ -91,17 +91,18 @@ async function inferBusesListIdFromSiteLists(): Promise<string> {
   return inferredBusesListIdByName;
 }
 
-async function getBusesListId(): Promise<string> {
+export async function getBusesListId(): Promise<string> {
   const explicit = optionalEnv('MS_BUSES_LIST_ID', '').trim();
   if (explicit) return explicit;
 
   const inferredFromLookup = await inferBusesListId();
   const routesListId = optionalEnv('MS_ROUTES_LIST_ID', '').trim();
 
-  // If the bus lookup seems to point at the Routes list, fall back to a name-based search.
-  // This happens when the SharePoint column wiring is wrong, and otherwise the UI shows routes
-  // in the bus dropdown.
-  if (inferredFromLookup && (!routesListId || inferredFromLookup !== routesListId)) {
+  // Only trust the inferred lookup list if we can positively confirm it is NOT the Routes list.
+  // When MS_ROUTES_LIST_ID is not set we cannot make that check, so fall back to a name-based
+  // search. (The original guard `!routesListId || ...` was always true when the env var was
+  // absent, silently returning the Routes list as the Buses list.)
+  if (inferredFromLookup && routesListId && inferredFromLookup !== routesListId) {
     return inferredFromLookup;
   }
 
@@ -159,6 +160,7 @@ export async function listBuses(): Promise<BusEntry[]> {
     const f = item.fields || {};
     const title =
       (busFields.plate ? asString(f[busFields.plate]) : '') ||
+      asString(f.field_1) ||
       asString(f.Plate) ||
       asString(f.plate) ||
       asString(f.LicensePlate) ||
