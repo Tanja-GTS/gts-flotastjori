@@ -28,7 +28,7 @@ export function cacheInvalidatePrefix(prefix: string) {
   }
 }
 
-function scheduleRefresh<T>(key: string, ttlMs: number, factory: () => Promise<T>) {
+function scheduleRefresh<T>(key: string, ttlMs: number, factory: () => Promise<T>, attempt = 0) {
   const entry = store.get(key) as CacheEntry<T> | undefined;
   if (!entry) return;
   if (entry.refreshTimer) clearTimeout(entry.refreshTimer);
@@ -42,10 +42,21 @@ function scheduleRefresh<T>(key: string, ttlMs: number, factory: () => Promise<T
       .then((value) => {
         const next: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
         store.set(key, next as CacheEntry<unknown>);
-        scheduleRefresh(key, ttlMs, factory);
+        scheduleRefresh(key, ttlMs, factory, 0);
       })
       .catch(() => {
-        // Refresh failed — entry will expire naturally; next caller will retry.
+        // Refresh failed — reschedule with backoff so the chain stays alive.
+        // Cap at 4 retries (60s max delay) then let the entry expire naturally.
+        if (attempt < 4) {
+          const retryDelay = Math.min(60_000, 5_000 * Math.pow(2, attempt));
+          const current = store.get(key) as CacheEntry<T> | undefined;
+          if (current && current === (entry as unknown)) {
+            current.refreshTimer = setTimeout(
+              () => scheduleRefresh(key, ttlMs, factory, attempt + 1),
+              retryDelay
+            );
+          }
+        }
       });
   }, delay);
 }
@@ -69,7 +80,7 @@ export async function cacheGetOrSet<T>(params: {
 
   try {
     const value = await pending;
-    const resolved: CacheEntry<T> = { value, expiresAt: t + Math.max(0, ttlMs) };
+    const resolved: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
     store.set(key, resolved as CacheEntry<unknown>);
     // Schedule a background refresh so the cache stays warm without needing traffic.
     scheduleRefresh(key, ttlMs, factory);
