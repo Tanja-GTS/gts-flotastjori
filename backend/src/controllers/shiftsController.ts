@@ -84,7 +84,7 @@ export async function getShifts(req: Request, res: Response) {
               `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
             );
           }
-          if (result.created === 0) prefetchedInstances = result.instances;
+          if (result.created === 0 && result.instances.length > 0) prefetchedInstances = result.instances;
         }
         const ht0 = Date.now();
         const hydrated = await listHydratedShifts({ month, workspaceId, prefetchedInstances });
