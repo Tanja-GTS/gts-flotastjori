@@ -1,7 +1,7 @@
 type CacheEntry<T> = {
   value: T | Promise<T>;
   expiresAt: number;
-  refreshing?: boolean;
+  refreshTimer?: ReturnType<typeof setTimeout>;
 };
 
 const store = new Map<string, CacheEntry<unknown>>();
@@ -11,59 +11,71 @@ function nowMs() {
 }
 
 export function cacheClearAll() {
+  for (const entry of store.values()) {
+    const e = entry as CacheEntry<unknown>;
+    if (e.refreshTimer) clearTimeout(e.refreshTimer);
+  }
   store.clear();
 }
 
 export function cacheInvalidatePrefix(prefix: string) {
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) store.delete(key);
+  for (const [key, entry] of store.entries()) {
+    if (key.startsWith(prefix)) {
+      const e = entry as CacheEntry<unknown>;
+      if (e.refreshTimer) clearTimeout(e.refreshTimer);
+      store.delete(key);
+    }
   }
+}
+
+function scheduleRefresh<T>(key: string, ttlMs: number, factory: () => Promise<T>) {
+  const entry = store.get(key) as CacheEntry<T> | undefined;
+  if (!entry) return;
+  if (entry.refreshTimer) clearTimeout(entry.refreshTimer);
+
+  // Fire the refresh 30s before the TTL expires so it completes before the entry goes stale.
+  const delay = Math.max(0, ttlMs - 30_000);
+  entry.refreshTimer = setTimeout(() => {
+    // Skip if the entry was invalidated or replaced in the meantime.
+    if (store.get(key) !== (entry as unknown)) return;
+    factory()
+      .then((value) => {
+        const next: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
+        store.set(key, next as CacheEntry<unknown>);
+        scheduleRefresh(key, ttlMs, factory);
+      })
+      .catch(() => {
+        // Refresh failed — entry will expire naturally; next caller will retry.
+      });
+  }, delay);
 }
 
 export async function cacheGetOrSet<T>(params: {
   key: string;
   ttlMs: number;
   factory: () => Promise<T>;
-  // How many ms before expiry to kick off a background refresh (stale-while-revalidate).
-  // Defaults to min(60s, ttlMs/2). Set to 0 to disable.
-  revalidateEarlyMs?: number;
 }): Promise<T> {
   const { key, ttlMs, factory } = params;
-  const revalidateMs =
-    params.revalidateEarlyMs !== undefined
-      ? params.revalidateEarlyMs
-      : Math.min(60_000, Math.floor(ttlMs / 2));
-
   const existing = store.get(key) as CacheEntry<T> | undefined;
   const t = nowMs();
 
   if (existing && existing.expiresAt > t) {
-    // Proactive background refresh: if the entry is within revalidateMs of expiry and not already
-    // refreshing, kick off a silent background update so users never hit the cold path.
-    if (revalidateMs > 0 && existing.expiresAt - t < revalidateMs && !existing.refreshing) {
-      existing.refreshing = true;
-      factory()
-        .then((value) => {
-          store.set(key, { value, expiresAt: nowMs() + Math.max(0, ttlMs) });
-        })
-        .catch(() => {
-          // If refresh fails, let the entry expire naturally and the next caller will retry.
-          const e = store.get(key) as CacheEntry<T> | undefined;
-          if (e) e.refreshing = false;
-        });
-    }
     return await (existing.value as Promise<T>);
   }
 
   const pending = factory();
-  store.set(key, { value: pending, expiresAt: t + Math.max(0, ttlMs) });
+  const pendingEntry: CacheEntry<T> = { value: pending, expiresAt: t + Math.max(0, ttlMs) };
+  store.set(key, pendingEntry as CacheEntry<unknown>);
 
   try {
     const value = await pending;
-    store.set(key, { value, expiresAt: t + Math.max(0, ttlMs) });
+    const resolved: CacheEntry<T> = { value, expiresAt: t + Math.max(0, ttlMs) };
+    store.set(key, resolved as CacheEntry<unknown>);
+    // Schedule a background refresh so the cache stays warm without needing traffic.
+    scheduleRefresh(key, ttlMs, factory);
     return value;
   } catch (err) {
-    store.delete(key);
+    if (store.get(key) === (pendingEntry as unknown)) store.delete(key);
     throw err;
   }
 }

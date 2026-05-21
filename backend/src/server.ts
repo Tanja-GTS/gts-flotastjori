@@ -139,10 +139,9 @@ const server = app.listen(port, host, () => {
     String(process.env.STARTUP_WARMUP ?? 'true').trim().toLowerCase()
   );
   if (warmupEnabled) {
-    const selfBase = (
-      (process.env.APP_ORIGIN || '').trim().replace(/\/$/, '') ||
-      `http://127.0.0.1:${port}`
-    );
+    // Always use localhost — APP_ORIGIN goes through Render's load balancer
+    // and would hit the old instance during a rolling deploy.
+    const selfBase = `http://127.0.0.1:${port}`;
     const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south,school,airport').trim();
     const workspaces = workspacesRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
