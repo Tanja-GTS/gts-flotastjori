@@ -166,6 +166,8 @@ const server = app.listen(port, host, () => {
           // eslint-disable-next-line no-console
           console.warn(`[startup] warm failed: workspaceId=${ws}&month=${m} — ${err instanceof Error ? err.message : String(err)}`);
         }
+        // Pause between pairs so the Graph API quota recovers before the next request burst.
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
       }
       // eslint-disable-next-line no-console
       console.log(`[startup] Cache warmup done: ${ok}/${pairs.length} succeeded`);

@@ -24,7 +24,7 @@ async function fetchWithRetry(url: string, init: RequestInit, methodLabel: strin
     const retryAfterMs = parseRetryAfterMs(res);
     const base = 500 * Math.pow(2, attempt);
     const jitter = Math.floor(Math.random() * 250);
-    const delay = Math.min(5_000, Math.max(retryAfterMs, base + jitter));
+    const delay = Math.min(60_000, Math.max(retryAfterMs, base + jitter));
 
     // Drain the body to avoid resource leaks in some runtimes.
     try {
