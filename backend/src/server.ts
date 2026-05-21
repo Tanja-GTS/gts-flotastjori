@@ -12,6 +12,7 @@ import compression from 'compression';
 import { apiRouter } from './routes';
 import { entraAuth } from './middleware/entraAuth';
 import { confirmRouter } from './routes/confirm';
+import { warmShiftCache } from './controllers/shiftsController';
 
 const app = express();
 
@@ -139,45 +140,35 @@ const server = app.listen(port, host, () => {
     String(process.env.STARTUP_WARMUP ?? 'true').trim().toLowerCase()
   );
   if (warmupEnabled) {
-    // Always use localhost — APP_ORIGIN goes through Render's load balancer
-    // and would hit the old instance during a rolling deploy.
-    const selfBase = `http://127.0.0.1:${port}`;
     const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south,school,airport').trim();
     const workspaces = workspacesRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
-    function warmupMonths(): string[] {
-      const now = new Date();
-      return [0, 1].map((offset) => {
-        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      });
-    }
+    const now = new Date();
+    const months = [0, 1].map((offset) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
 
-    const months = warmupMonths();
-    const urls = workspaces.flatMap((ws) =>
-      months.map((m) => `${selfBase}/api/shifts?workspaceId=${ws}&month=${m}`)
-    );
+    const pairs = workspaces.flatMap((ws) => months.map((m) => ({ ws, m })));
 
     // eslint-disable-next-line no-console
-    console.log(`[startup] Warming ${urls.length} shift caches sequentially...`);
-    // Sequential (not parallel) so the first request warms shared caches
-    // (patterns, buses, drivers) and subsequent requests only need instances.
-    // Parallel firing risks triggering Graph API throttling.
+    console.log(`[startup] Warming ${pairs.length} shift caches directly (bypasses auth)...`);
+    // Sequential so shared caches (patterns, buses, drivers) are warm before the next workspace.
     let ok = 0;
     (async () => {
-      for (const url of urls) {
+      for (const { ws, m } of pairs) {
         try {
-          const res = await fetch(url, { signal: AbortSignal.timeout(90_000) });
+          await warmShiftCache(ws, m);
           // eslint-disable-next-line no-console
-          console.log(`[startup] warmed ${res.status}: ${new URL(url).search}`);
-          if (res.ok) ok += 1;
+          console.log(`[startup] warmed ok: workspaceId=${ws}&month=${m}`);
+          ok += 1;
         } catch (err) {
           // eslint-disable-next-line no-console
-          console.warn(`[startup] warm failed: ${new URL(url).search} — ${err instanceof Error ? err.message : String(err)}`);
+          console.warn(`[startup] warm failed: workspaceId=${ws}&month=${m} — ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       // eslint-disable-next-line no-console
-      console.log(`[startup] Cache warmup done: ${ok}/${urls.length} succeeded`);
+      console.log(`[startup] Cache warmup done: ${ok}/${pairs.length} succeeded`);
     })();
   }
 });

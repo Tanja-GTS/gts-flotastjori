@@ -28,6 +28,34 @@ function monthDateRange(month: string): { fromdate: string; todate: string } | n
   return { fromdate: format(start), todate: format(end) };
 }
 
+function makeShiftsFactory(workspaceId: string | undefined, month: string | undefined) {
+  return async () => {
+    const ft0 = Date.now();
+    let prefetchedInstances;
+    if (AUTO_GENERATE_ON_READ && workspaceId && month) {
+      const result = await ensureShiftInstancesForMonth({ workspaceId, month });
+      console.log(`[shifts] ensureShiftInstances ${workspaceId} ${month}: ${Date.now() - ft0}ms (created=${result.created}, found=${result.instances.length})`);
+      if (result.warnings.length > 0) {
+        console.warn(`[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`);
+      }
+      if (result.created === 0 && result.instances.length > 0) prefetchedInstances = result.instances;
+    }
+    const ht0 = Date.now();
+    const hydrated = await listHydratedShifts({ month, workspaceId, prefetchedInstances });
+    console.log(`[shifts] hydrate ${workspaceId} ${month}: ${Date.now() - ht0}ms → total factory ${Date.now() - ft0}ms`);
+    return hydrated;
+  };
+}
+
+export async function warmShiftCache(workspaceId: string, month: string): Promise<void> {
+  const cacheKey = `shifts|${workspaceId}|${month}`;
+  await cacheGetOrSet({
+    key: cacheKey,
+    ttlMs: SHIFTS_TTL_MS,
+    factory: makeShiftsFactory(workspaceId, month),
+  });
+}
+
 export async function getShifts(req: Request, res: Response) {
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
@@ -37,7 +65,6 @@ export async function getShifts(req: Request, res: Response) {
 
     if (date) {
       // We can support date-level filtering later; for now keep it simple.
-      // Most UI operations are month/week based.
     }
 
     const cacheKey = `shifts|${workspaceId || 'all'}|${month || 'all'}`;
@@ -73,24 +100,7 @@ export async function getShifts(req: Request, res: Response) {
     const shifts = await cacheGetOrSet({
       key: cacheKey,
       ttlMs: SHIFTS_TTL_MS,
-      factory: async () => {
-        const ft0 = Date.now();
-        let prefetchedInstances;
-        if (AUTO_GENERATE_ON_READ && workspaceId && month) {
-          const result = await ensureShiftInstancesForMonth({ workspaceId, month });
-          console.log(`[shifts] ensureShiftInstances ${workspaceId} ${month}: ${Date.now() - ft0}ms (created=${result.created}, found=${result.instances.length})`);
-          if (result.warnings.length > 0) {
-            console.warn(
-              `[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`
-            );
-          }
-          if (result.created === 0 && result.instances.length > 0) prefetchedInstances = result.instances;
-        }
-        const ht0 = Date.now();
-        const hydrated = await listHydratedShifts({ month, workspaceId, prefetchedInstances });
-        console.log(`[shifts] hydrate ${workspaceId} ${month}: ${Date.now() - ht0}ms → total factory ${Date.now() - ft0}ms`);
-        return hydrated;
-      },
+      factory: makeShiftsFactory(workspaceId, month),
     });
     console.log(`[shifts] GET ${workspaceId} ${month}: ${Date.now() - t0}ms (cached=${Date.now() - t0 < 5})`);
     res.json({ ok: true, shifts });
