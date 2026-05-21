@@ -132,6 +132,53 @@ const server = app.listen(port, host, () => {
   console.log(`Backend listening on http://${host}:${port}`);
   // eslint-disable-next-line no-console
   if (serveFrontend) console.log('Serving frontend (dist auto-detected)');
+
+  // Warm the shift caches on startup so the first user request is fast.
+  // Runs in the background — does not block the server from accepting connections.
+  const warmupEnabled = !['false', '0', 'no', 'off'].includes(
+    String(process.env.STARTUP_WARMUP ?? 'true').trim().toLowerCase()
+  );
+  if (warmupEnabled) {
+    const selfBase = (
+      (process.env.APP_ORIGIN || '').trim().replace(/\/$/, '') ||
+      `http://127.0.0.1:${port}`
+    );
+    const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south,school,airport').trim();
+    const workspaces = workspacesRaw.split(',').map((s) => s.trim()).filter(Boolean);
+
+    function warmupMonths(): string[] {
+      const now = new Date();
+      return [0, 1].map((offset) => {
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      });
+    }
+
+    const months = warmupMonths();
+    const urls = workspaces.flatMap((ws) =>
+      months.map((m) => `${selfBase}/api/shifts?workspaceId=${ws}&month=${m}`)
+    );
+
+    // eslint-disable-next-line no-console
+    console.log(`[startup] Warming ${urls.length} shift caches...`);
+    Promise.allSettled(
+      urls.map((url) =>
+        fetch(url, { signal: AbortSignal.timeout(90_000) })
+          .then((res) => {
+            // eslint-disable-next-line no-console
+            console.log(`[startup] warmed ${res.status}: ${new URL(url).search}`);
+          })
+          .catch((err) => {
+            // eslint-disable-next-line no-console
+            console.warn(`[startup] warm failed: ${new URL(url).search} — ${err instanceof Error ? err.message : String(err)}`);
+          })
+      )
+    ).then((results) => {
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      // eslint-disable-next-line no-console
+      console.log(`[startup] Cache warmup done: ${ok}/${results.length} succeeded`);
+    });
+  }
 });
 
 server.on('error', (err) => {
