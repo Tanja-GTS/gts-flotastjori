@@ -160,24 +160,26 @@ const server = app.listen(port, host, () => {
     );
 
     // eslint-disable-next-line no-console
-    console.log(`[startup] Warming ${urls.length} shift caches...`);
-    Promise.allSettled(
-      urls.map((url) =>
-        fetch(url, { signal: AbortSignal.timeout(90_000) })
-          .then((res) => {
-            // eslint-disable-next-line no-console
-            console.log(`[startup] warmed ${res.status}: ${new URL(url).search}`);
-          })
-          .catch((err) => {
-            // eslint-disable-next-line no-console
-            console.warn(`[startup] warm failed: ${new URL(url).search} — ${err instanceof Error ? err.message : String(err)}`);
-          })
-      )
-    ).then((results) => {
-      const ok = results.filter((r) => r.status === 'fulfilled').length;
+    console.log(`[startup] Warming ${urls.length} shift caches sequentially...`);
+    // Sequential (not parallel) so the first request warms shared caches
+    // (patterns, buses, drivers) and subsequent requests only need instances.
+    // Parallel firing risks triggering Graph API throttling.
+    let ok = 0;
+    (async () => {
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(90_000) });
+          // eslint-disable-next-line no-console
+          console.log(`[startup] warmed ${res.status}: ${new URL(url).search}`);
+          if (res.ok) ok += 1;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(`[startup] warm failed: ${new URL(url).search} — ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       // eslint-disable-next-line no-console
-      console.log(`[startup] Cache warmup done: ${ok}/${results.length} succeeded`);
-    });
+      console.log(`[startup] Cache warmup done: ${ok}/${urls.length} succeeded`);
+    })();
   }
 });
 
