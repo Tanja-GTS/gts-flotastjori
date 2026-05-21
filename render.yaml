@@ -103,7 +103,7 @@ services:
       # Keep hydrated month responses warm for managers opening the same months repeatedly.
       # Writes already invalidate this cache explicitly.
       - key: CACHE_SHIFTS_TTL_MS
-        value: "300000"
+        value: "1800000"
 
       # Automatically pull Timon assignment changes when a month is opened.
       # Disabled in production because it makes month opening feel too slow.

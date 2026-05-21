@@ -2,6 +2,7 @@ type CacheEntry<T> = {
   value: T | Promise<T>;
   expiresAt: number;
   refreshTimer?: ReturnType<typeof setTimeout>;
+  isRefreshing?: boolean;
 };
 
 const store = new Map<string, CacheEntry<unknown>>();
@@ -70,8 +71,33 @@ export async function cacheGetOrSet<T>(params: {
   const existing = store.get(key) as CacheEntry<T> | undefined;
   const t = nowMs();
 
-  if (existing && existing.expiresAt > t) {
-    return await (existing.value as Promise<T>);
+  if (existing) {
+    if (existing.expiresAt > t) {
+      // Fresh — return immediately (awaits if still a pending Promise).
+      return await (existing.value as Promise<T>);
+    }
+
+    // Stale but has resolved data — return it immediately and refresh in background.
+    if (!(existing.value instanceof Promise) && !existing.isRefreshing) {
+      existing.isRefreshing = true;
+      factory()
+        .then((value) => {
+          const next: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
+          store.set(key, next as CacheEntry<unknown>);
+          scheduleRefresh(key, ttlMs, factory, 0);
+        })
+        .catch(() => {
+          // Background refresh failed — clear the flag so the next request can retry.
+          const current = store.get(key) as CacheEntry<T> | undefined;
+          if (current && current.isRefreshing) current.isRefreshing = false;
+        });
+      return existing.value as T;
+    }
+
+    // Stale but in-flight Promise — wait for it rather than launching a second factory.
+    if (existing.value instanceof Promise) {
+      return await (existing.value as Promise<T>);
+    }
   }
 
   const pending = factory();
@@ -82,7 +108,6 @@ export async function cacheGetOrSet<T>(params: {
     const value = await pending;
     const resolved: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
     store.set(key, resolved as CacheEntry<unknown>);
-    // Schedule a background refresh so the cache stays warm without needing traffic.
     scheduleRefresh(key, ttlMs, factory);
     return value;
   } catch (err) {
