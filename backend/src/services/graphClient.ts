@@ -13,7 +13,7 @@ function parseRetryAfterMs(res: Response): number {
 }
 
 async function fetchWithRetry(url: string, init: RequestInit, methodLabel: string): Promise<Response> {
-  const maxRetries = 6;
+  const maxRetries = 3;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const res = await fetch(url, init);
     if (res.ok) return res;
@@ -24,7 +24,7 @@ async function fetchWithRetry(url: string, init: RequestInit, methodLabel: strin
     const retryAfterMs = parseRetryAfterMs(res);
     const base = 500 * Math.pow(2, attempt);
     const jitter = Math.floor(Math.random() * 250);
-    const delay = Math.min(30_000, Math.max(retryAfterMs, base + jitter));
+    const delay = Math.min(5_000, Math.max(retryAfterMs, base + jitter));
 
     // Drain the body to avoid resource leaks in some runtimes.
     try {
