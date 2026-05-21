@@ -455,17 +455,31 @@ export default function Timeline({
     return unique;
   }, [selectedShift]);
 
+  // Plate string → bus ID lookup (template busOverride may store a plate, not an ID)
+  const busIdByPlate = useMemo(
+    () => new Map(busOptions.map((b) => [b.title, b.value])),
+    [busOptions]
+  );
+
   const getTripBusPlate = useCallback(
     (trip) => {
+      // User-set per-trip override (stored as bus ID by the Select onChange)
       const perTrip = selectedShift?.tripBusOverrides?.[trip.name];
       if (perTrip) return perTrip;
 
+      // Template-defined override — may be a bus ID or a plate string
       const templateOverride = trip.busOverride;
-      if (templateOverride && templateOverride !== 'null') return templateOverride;
+      if (templateOverride && templateOverride !== 'null') {
+        // Already a valid bus ID?
+        if (busOptions.some((b) => b.value === templateOverride)) return templateOverride;
+        // Treat as plate string and resolve to bus ID
+        return busIdByPlate.get(templateOverride) || null;
+      }
 
-      return selectedShift?.defaultBus || '';
+      // Fall back to the shift's assigned bus ID so the Select can match and show the plate label
+      return selectedShift?.busId || null;
     },
-    [selectedShift]
+    [selectedShift, busOptions, busIdByPlate]
   );
 
   const setTripBusPlate = useCallback(
@@ -489,12 +503,18 @@ export default function Timeline({
 
   const existingNote = selectedShift ? selectedShift.note || '' : '';
 
+  const busLabelById = useMemo(
+    () => new Map(busOptions.map((b) => [b.value, b.title])),
+    [busOptions]
+  );
+
   const busesUsed = selectedShift
     ? Array.from(
         new Set(
           selectedTrips
             .map((trip) => getTripBusPlate(trip))
             .filter(Boolean)
+            .map((id) => busLabelById.get(id) || id)
         )
       )
     : [];
