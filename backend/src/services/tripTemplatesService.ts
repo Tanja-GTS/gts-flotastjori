@@ -195,6 +195,7 @@ let cache:
       fetchedAtMs: number;
       items: Array<{ id: string; fields: Record<string, unknown> }>;
     } = null;
+let tripItemsFetchInProgress: Promise<Array<{ id: string; fields: Record<string, unknown> }>> | null = null;
 
 let templateTripLookupCache:
   | null
@@ -207,31 +208,39 @@ async function listTripTemplateItems(): Promise<Array<{ id: string; fields: Reco
   const listId = await getTripTemplatesListId();
   if (!listId) return [];
 
-  const ttlMs = Number(optionalEnv('TRIP_TEMPLATES_CACHE_TTL_MS', '30000')) || 30000;
+  const ttlMs = Number(optionalEnv('TRIP_TEMPLATES_CACHE_TTL_MS', '300000')) || 300000;
   const now = Date.now();
   if (cache && now - cache.fetchedAtMs < ttlMs) return cache.items;
+  if (tripItemsFetchInProgress) return tripItemsFetchInProgress;
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
+  tripItemsFetchInProgress = (async () => {
+    try {
+      const graph = getGraphConfig();
+      const token = await getGraphAppToken(graph);
 
-  const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(listId)}/items?$expand=fields&$top=999`;
+      const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+        graph.siteId
+      )}/lists/${encodeURIComponent(listId)}/items?$expand=fields&$top=999`;
 
-  const allItems: GraphListItem[] = [];
-  let nextUrl: string | undefined = baseUrl;
-  while (nextUrl) {
-    const page: GraphListItemsResponse = await graphGet<GraphListItemsResponse>(nextUrl, token);
-    allItems.push(...(page.value || []));
-    nextUrl = page['@odata.nextLink'];
-  }
+      const allItems: GraphListItem[] = [];
+      let nextUrl: string | undefined = baseUrl;
+      while (nextUrl) {
+        const page: GraphListItemsResponse = await graphGet<GraphListItemsResponse>(nextUrl, token);
+        allItems.push(...(page.value || []));
+        nextUrl = page['@odata.nextLink'];
+      }
 
-  const items = allItems
-    .map((i) => ({ id: asString(i.id), fields: (i.fields || {}) as Record<string, unknown> }))
-    .filter((i) => i.id);
+      const items = allItems
+        .map((i) => ({ id: asString(i.id), fields: (i.fields || {}) as Record<string, unknown> }))
+        .filter((i) => i.id);
 
-  cache = { fetchedAtMs: now, items };
-  return items;
+      cache = { fetchedAtMs: now, items };
+      return items;
+    } finally {
+      tripItemsFetchInProgress = null;
+    }
+  })();
+  return tripItemsFetchInProgress;
 }
 
 function readLookupIdsFromTemplateField(value: unknown): string[] {

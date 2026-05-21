@@ -194,61 +194,60 @@ function pickPhone(fields: Record<string, unknown>): string {
 }
 
 let driversCache: { fetchedAtMs: number; items: DriverDto[] } | null = null;
+let driversFetchInProgress: Promise<DriverDto[]> | null = null;
 
-/**
- * Lists drivers from the Drivers list.
- *
- * The listId is auto-discovered from the ShiftInstances driverId lookup when possible.
- */
 export async function listDrivers(): Promise<DriverDto[]> {
   const ttlMs = Number(optionalEnv('DRIVERS_CACHE_TTL_MS', '300000')) || 300000;
   const now = Date.now();
   if (driversCache && now - driversCache.fetchedAtMs < ttlMs) return driversCache.items;
+  if (driversFetchInProgress) return driversFetchInProgress;
 
-  const driversListId = await getDriversListId();
-  if (!driversListId) return [];
+  driversFetchInProgress = (async () => {
+    try {
+      const driversListId = await getDriversListId();
+      if (!driversListId) return [];
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
+      const graph = getGraphConfig();
+      const token = await getGraphAppToken(graph);
 
-  const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(driversListId)}/items?$expand=fields&$top=999`;
+      const baseUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+        graph.siteId
+      )}/lists/${encodeURIComponent(driversListId)}/items?$expand=fields&$top=999`;
 
-  const allItems: GraphListItem[] = [];
-  let nextUrl: string | undefined = baseUrl;
+      const allItems: GraphListItem[] = [];
+      let nextUrl: string | undefined = baseUrl;
 
-  while (nextUrl) {
-    const page: GraphListItemsResponse = await graphGet<GraphListItemsResponse>(nextUrl, token);
-    allItems.push(...(page.value || []));
-    nextUrl = page['@odata.nextLink'];
-  }
+      while (nextUrl) {
+        const page: GraphListItemsResponse = await graphGet<GraphListItemsResponse>(nextUrl, token);
+        allItems.push(...(page.value || []));
+        nextUrl = page['@odata.nextLink'];
+      }
 
-  const items = allItems
-    .map((item) => {
-      const fields = item.fields || {};
-      const name =
-        asString(fields.Title) ||
-        asString(fields.LinkTitle) ||
-        asString(fields.Name) ||
-        asString(fields.FullName) ||
-        '';
-
-      const ssn = pickSsn(fields);
-      const email = pickEmail(fields);
-      const phone = pickPhone(fields);
-
-      return {
-        id: String(item.id || '').trim(),
-        name: name.trim() || String(item.id || '').trim(),
-        ssn: ssn || undefined,
-        email: email || undefined,
-        phone: phone || undefined,
-      };
-    })
-    .filter((d) => d.id && d.name);
-  driversCache = { fetchedAtMs: now, items };
-  return items;
+      const items = allItems
+        .map((item) => {
+          const fields = item.fields || {};
+          const name =
+            asString(fields.Title) ||
+            asString(fields.LinkTitle) ||
+            asString(fields.Name) ||
+            asString(fields.FullName) ||
+            '';
+          return {
+            id: String(item.id || '').trim(),
+            name: name.trim() || String(item.id || '').trim(),
+            ssn: pickSsn(fields) || undefined,
+            email: pickEmail(fields) || undefined,
+            phone: pickPhone(fields) || undefined,
+          };
+        })
+        .filter((d) => d.id && d.name);
+      driversCache = { fetchedAtMs: now, items };
+      return items;
+    } finally {
+      driversFetchInProgress = null;
+    }
+  })();
+  return driversFetchInProgress;
 }
 
 export async function resolveDrivers(params: {
