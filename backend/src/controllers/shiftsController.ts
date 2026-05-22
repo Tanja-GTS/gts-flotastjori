@@ -35,8 +35,9 @@ function makeShiftsFactory(workspaceId: string | undefined, month: string | unde
     if (AUTO_GENERATE_ON_READ && workspaceId && month) {
       const result = await ensureShiftInstancesForMonth({ workspaceId, month });
       console.log(`[shifts] ensureShiftInstances ${workspaceId} ${month}: ${Date.now() - ft0}ms (created=${result.created}, found=${result.instances.length})`);
-      if (result.warnings.length > 0) {
-        console.warn(`[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${result.warnings.join('\n')}`);
+      const realWarnings = result.warnings.filter((w) => !w.includes('No ShiftPatterns found'));
+      if (realWarnings.length > 0) {
+        console.warn(`[shifts] auto-generation warnings for ${workspaceId} ${month}:\n${realWarnings.join('\n')}`);
       }
       if (result.created === 0 && result.instances.length > 0) prefetchedInstances = result.instances;
     }
