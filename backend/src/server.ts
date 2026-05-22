@@ -144,7 +144,7 @@ const server = app.listen(port, host, () => {
     const workspaces = workspacesRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
     const now = new Date();
-    const months = [0, 1].map((offset) => {
+    const months = [0].map((offset) => {
       const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
       return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     });
