@@ -903,6 +903,17 @@ async function createMissingShiftInstances(params: {
       const dateObj = new Date(`${date}T00:00:00`);
       if (!prepared.dows.includes(dateObj.getDay())) continue;
 
+      // Skip if this specific date falls outside the pattern's effective date range.
+      // (isPatternActiveForMonth only checks month-level overlap, not day-level.)
+      if (prepared.pattern.effectiveFrom) {
+        const from = new Date(prepared.pattern.effectiveFrom.split('T')[0] + 'T00:00:00');
+        if (dateObj < from) continue;
+      }
+      if (prepared.pattern.effectiveTo) {
+        const to = new Date(prepared.pattern.effectiveTo.split('T')[0] + 'T23:59:59');
+        if (dateObj > to) continue;
+      }
+
       const key = `${date}|${prepared.pattern.id}`;
       if (existingKeys.has(key)) {
         skipped += 1;
@@ -1182,6 +1193,21 @@ export async function listHydratedShifts(params: {
     .map((inst): HydratedShiftDto | null => {
       const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
       if (!pattern) return null;
+
+      // Drop instances whose specific date falls outside the pattern's effective range.
+      // isPatternActiveForMonth allows both patterns in a transition month (e.g. June),
+      // so we need day-level filtering here to prevent winter shifts showing on summer dates.
+      if (inst.date && (pattern.effectiveFrom || pattern.effectiveTo)) {
+        const instDate = new Date(inst.date.split('T')[0] + 'T12:00:00');
+        if (pattern.effectiveFrom) {
+          const from = new Date(pattern.effectiveFrom.split('T')[0] + 'T00:00:00');
+          if (instDate < from) return null;
+        }
+        if (pattern.effectiveTo) {
+          const to = new Date(pattern.effectiveTo.split('T')[0] + 'T23:59:59');
+          if (instDate > to) return null;
+        }
+      }
 
       const patternWorkspaceId = normalizeWorkspaceSlug((pattern as any).workspaceId);
 
