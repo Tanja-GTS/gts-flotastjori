@@ -149,36 +149,29 @@ const server = app.listen(port, host, () => {
       return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     });
 
+    const pairs = workspaces.flatMap((ws) => months.map((m) => ({ ws, m })));
     // eslint-disable-next-line no-console
-    console.log(`[startup] Warming shift caches for ${workspaces.length} workspace(s) × ${months.length} month(s)...`);
+    console.log(`[startup] Warming ${pairs.length} shift caches...`);
 
-    // Warm all workspaces for one month in parallel (shared caches deduplicate Graph calls),
-    // then move to the next month. A short pause between months lets quota recover.
+    // Sequential with a pause between each pair so Graph quota is never flooded.
+    // Shared caches (patterns, buses, drivers) are deduplicated across concurrent callers,
+    // so user requests that arrive during warmup don't launch duplicate Graph fetches.
     (async () => {
       let ok = 0;
-      const total = workspaces.length * months.length;
-      for (const m of months) {
-        const results = await Promise.allSettled(
-          workspaces.map(async (ws) => {
-            await warmShiftCache(ws, m);
-            // eslint-disable-next-line no-console
-            console.log(`[startup] warmed ok: workspaceId=${ws}&month=${m}`);
-          })
-        );
-        for (const [i, r] of results.entries()) {
-          if (r.status === 'fulfilled') {
-            ok += 1;
-          } else {
-            const ws = workspaces[i];
-            // eslint-disable-next-line no-console
-            console.warn(`[startup] warm failed: workspaceId=${ws}&month=${m} — ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
-          }
+      for (const { ws, m } of pairs) {
+        try {
+          await warmShiftCache(ws, m);
+          // eslint-disable-next-line no-console
+          console.log(`[startup] warmed ok: workspaceId=${ws}&month=${m}`);
+          ok += 1;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(`[startup] warm failed: workspaceId=${ws}&month=${m} — ${err instanceof Error ? err.message : String(err)}`);
         }
-        // Brief pause between months so quota recovers before the next batch.
         await new Promise((resolve) => setTimeout(resolve, 5_000));
       }
       // eslint-disable-next-line no-console
-      console.log(`[startup] Cache warmup done: ${ok}/${total} succeeded`);
+      console.log(`[startup] Cache warmup done: ${ok}/${pairs.length} succeeded`);
     })();
   }
 });

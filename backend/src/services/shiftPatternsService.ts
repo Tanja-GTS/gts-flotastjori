@@ -95,6 +95,7 @@ async function readWorkspaceSlug(fields: Record<string, unknown>, internalName: 
 }
 
 let enrichedPatternsCache: { fetchedAtMs: number; items: ShiftPatternDto[] } | null = null;
+let patternsFetchInProgress: Promise<ShiftPatternDto[]> | null = null;
 
 function readAny(fields: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
@@ -180,6 +181,14 @@ async function fetchAllEnrichedPatterns(): Promise<ShiftPatternDto[]> {
   if (enrichedPatternsCache && now - enrichedPatternsCache.fetchedAtMs < ttlMs) {
     return enrichedPatternsCache.items;
   }
+  if (patternsFetchInProgress) return patternsFetchInProgress;
+  patternsFetchInProgress = fetchAllEnrichedPatternsInner(now).finally(() => {
+    patternsFetchInProgress = null;
+  });
+  return patternsFetchInProgress;
+}
+
+async function fetchAllEnrichedPatternsInner(now: number): Promise<ShiftPatternDto[]> {
 
   const graph = getGraphConfig();
   const lists = getListIds();
