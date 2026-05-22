@@ -105,6 +105,9 @@ services:
       - key: CACHE_SHIFTS_TTL_MS
         value: "1800000"
 
+      - key: WARMUP_WORKSPACES
+        value: "south"
+
       # Automatically pull Timon assignment changes when a month is opened.
       # Disabled in production because it makes month opening feel too slow.
       # Timon still syncs every day via the dedicated 04:00 UTC cron job.

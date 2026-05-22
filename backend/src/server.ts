@@ -140,7 +140,7 @@ const server = app.listen(port, host, () => {
     String(process.env.STARTUP_WARMUP ?? 'true').trim().toLowerCase()
   );
   if (warmupEnabled) {
-    const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south,school,airport').trim();
+    const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south').trim();
     const workspaces = workspacesRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
     const now = new Date();
