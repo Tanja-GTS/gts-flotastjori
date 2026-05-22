@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { ensureShiftInstancesForMonth, listHydratedShifts } from '../services/shiftInstancesService';
 import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { syncTimonShiftAssignments } from '../services/timonSyncService';
+import { listBuses } from '../services/busesService';
+import { listDrivers } from '../services/driversService';
 import { sendApiError } from './apiError';
 
 const SHIFTS_TTL_MS = Number(process.env.CACHE_SHIFTS_TTL_MS || 15000);
@@ -31,6 +33,12 @@ function monthDateRange(month: string): { fromdate: string; todate: string } | n
 function makeShiftsFactory(workspaceId: string | undefined, month: string | undefined) {
   return async () => {
     const ft0 = Date.now();
+    // Start shared-cache fetches immediately so they overlap with the serial
+    // ensureShiftInstancesForMonth chain (workspaceCol → workspaceMaps → patterns → instances).
+    // The dedup guards ensure no duplicate Graph calls if already in-flight.
+    listBuses().catch(() => undefined);
+    listDrivers().catch(() => undefined);
+
     let prefetchedInstances;
     if (AUTO_GENERATE_ON_READ && workspaceId && month) {
       const result = await ensureShiftInstancesForMonth({ workspaceId, month });
