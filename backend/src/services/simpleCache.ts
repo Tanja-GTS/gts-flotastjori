@@ -98,6 +98,10 @@ export async function cacheGetOrSet<T>(params: {
     if (existing.value instanceof Promise) {
       return await (existing.value as Promise<T>);
     }
+
+    // Stale, isRefreshing=true, value already resolved — background refresh in progress.
+    // Return the stale value immediately rather than falling through to a duplicate cold call.
+    return existing.value as T;
   }
 
   const pending = factory();
