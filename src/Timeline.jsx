@@ -1695,7 +1695,7 @@ export default function Timeline({
                           <li key={j} style={{ fontSize: 13, marginBottom: 4 }}>
                             {ev.type === 'stop' ? (
                               <>
-                                <strong>{ev.time}</strong> — {ev.label}
+                                <strong>{ev.time}</strong> — {ev.label}{ev.route ? <span style={{ marginLeft: 6, color: '#888', fontSize: 12 }}>({ev.route})</span> : null}
                               </>
                             ) : (
                               <em>

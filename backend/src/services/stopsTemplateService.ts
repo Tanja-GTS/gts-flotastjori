@@ -37,6 +37,7 @@ export type StopEventDto =
       type: 'stop';
       time: string;
       label: string;
+      route?: string;
     }
   | {
       type: 'break';
@@ -284,6 +285,19 @@ function readStopLabel(fields: Record<string, unknown>): string {
   return decodeSharePointEncodedValue(raw);
 }
 
+function readStopRoute(fields: Record<string, unknown>): string {
+  const explicit = optionalEnv('STOPSTEMPLATE_FIELD_ROUTE', '').trim();
+  const raw = (
+    (explicit ? asString(fields[explicit]).trim() : '') ||
+    asString(fields.Route).trim() ||
+    asString(fields.RouteName).trim() ||
+    asString(fields.routeName).trim() ||
+    asString(fields.route).trim() ||
+    ''
+  );
+  return decodeSharePointEncodedValue(raw);
+}
+
 function readStopTimeRaw(fields: Record<string, unknown>): string {
   const explicit = optionalEnv('STOPSTEMPLATE_FIELD_TIME', '').trim();
   const raw =
@@ -484,6 +498,7 @@ function computeStopsForTripIds(params: {
     if (!tripId || !unique.includes(tripId)) continue;
 
     const label = readStopLabel(fields);
+    const route = readStopRoute(fields);
     const timeRaw = readStopTimeRaw(fields);
     const time = normalizeTimeHHMM(timeRaw) || timeRaw;
 
@@ -598,7 +613,7 @@ function computeStopsForTripIds(params: {
         tripId,
         itemId: item.id,
         sortKey,
-        event: { type: 'stop', time, label },
+        event: { type: 'stop', time, label, ...(route ? { route } : {}) },
       });
     }
     grouped.set(tripId, arr);
