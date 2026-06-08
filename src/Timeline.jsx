@@ -321,7 +321,6 @@ export default function Timeline({
           )
         );
 
-        setAssignReviewOpened(false);
         setSelectedShiftToken(null);
       } catch (e) {
         const msg =
@@ -580,7 +579,6 @@ export default function Timeline({
   useEffect(() => {
     if (!isRecordMonth) return;
     setAddMode(false);
-    setAssignReviewOpened(false);
     setIsEditingNote(false);
   }, [isRecordMonth]);
 
@@ -791,6 +789,14 @@ export default function Timeline({
             >
               {t('nav.drivers')}
             </button>
+            <a
+              className="appHeader__navLink appHeader__navLink--secondary"
+              href="https://meowing-lark-f0c.notion.site/All-routes-Vetur-28c80c3e1d3180418874de9cba48f27b?source=copy_link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Go to Notion
+            </a>
           </div>
 
           <div className="appHeader__right">
