@@ -1,7 +1,15 @@
 import { HttpError } from '../utils/httpError';
 
+// Hard cap on any single Graph API HTTP request. Without this, a stalled
+// Microsoft endpoint hangs the Node process indefinitely.
+const GRAPH_FETCH_TIMEOUT_MS = Number(process.env.GRAPH_FETCH_TIMEOUT_MS || '25000');
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(GRAPH_FETCH_TIMEOUT_MS) });
 }
 
 function parseRetryAfterMs(res: Response): number {
@@ -15,7 +23,7 @@ function parseRetryAfterMs(res: Response): number {
 async function fetchWithRetry(url: string, init: RequestInit, methodLabel: string): Promise<Response> {
   const maxRetries = 3;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const res = await fetch(url, init);
+    const res = await fetchWithTimeout(url, init);
     if (res.ok) return res;
 
     const retryable = res.status === 429 || res.status === 503 || res.status === 504;
@@ -39,7 +47,7 @@ async function fetchWithRetry(url: string, init: RequestInit, methodLabel: strin
   }
 
   // Unreachable, but TS likes a return.
-  return fetch(url, init);
+  return fetchWithTimeout(url, init);
 }
 
 function tryParseJson(text: string): unknown {

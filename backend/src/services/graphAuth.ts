@@ -109,10 +109,12 @@ async function getClientCredentialsToken(params: {
   body.set('grant_type', 'client_credentials');
   body.set('scope', 'https://graph.microsoft.com/.default');
 
+  const GRAPH_FETCH_TIMEOUT_MS = Number(process.env.GRAPH_FETCH_TIMEOUT_MS || '25000');
   const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    signal: AbortSignal.timeout(GRAPH_FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
