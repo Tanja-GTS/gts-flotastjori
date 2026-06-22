@@ -137,7 +137,7 @@ const server = app.listen(port, host, () => {
   // Warm the shift caches on startup so the first user request is fast.
   // Runs in the background — does not block the server from accepting connections.
   const warmupEnabled = !['false', '0', 'no', 'off'].includes(
-    String(process.env.STARTUP_WARMUP ?? 'true').trim().toLowerCase()
+    String(process.env.STARTUP_WARMUP ?? 'false').trim().toLowerCase()
   );
   if (warmupEnabled) {
     const workspacesRaw = (process.env.WARMUP_WORKSPACES || 'south').trim();

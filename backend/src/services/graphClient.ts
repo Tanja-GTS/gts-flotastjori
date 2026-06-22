@@ -26,7 +26,12 @@ async function fetchWithRetry(url: string, init: RequestInit, methodLabel: strin
     const res = await fetchWithTimeout(url, init);
     if (res.ok) return res;
 
-    const retryable = res.status === 429 || res.status === 503 || res.status === 504;
+    // 429 = Microsoft throttled. Their windows are typically minutes, so retrying
+    // after a few seconds just wastes time and blocks the caller. Fail fast and
+    // let the error surface to the user immediately.
+    if (res.status === 429) return res;
+
+    const retryable = res.status === 503 || res.status === 504;
     if (!retryable || attempt === maxRetries) return res;
 
     const retryAfterMs = parseRetryAfterMs(res);
