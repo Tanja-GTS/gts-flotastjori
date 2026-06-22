@@ -14,6 +14,19 @@ import { useI18n } from './i18n';
 
 const fallbackDrivers = ['Ahmed', 'Jon', 'Maria', 'Sara'].map((name) => ({ value: name, label: name, name }));
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
+
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
@@ -91,6 +104,8 @@ export default function Timeline({
       { value: 'airport', label: 'Airport Transfers' },
     ];
   }, [workspaceOptionsProp]);
+
+  const isMobile = useIsMobile();
 
   const routes = selectRoutesForWorkspace(shifts, workspaceId);
   const routeOptions = routes.map((route) => ({ value: route, label: route }));
@@ -534,6 +549,14 @@ export default function Timeline({
   }, []);
   const isRecordMonth = viewedMonthStart.getTime() < currentMonthStart.getTime();
 
+  // On mobile, lock to single-day view and jump to today.
+  useEffect(() => {
+    if (!isMobile) return;
+    setViewDays(1);
+    const t = new Date();
+    setCurrentWeekStart(new Date(t.getFullYear(), t.getMonth(), t.getDate()));
+  }, [isMobile]);
+
   useEffect(() => {
     if (!onRangeChange) return;
     const start = format(currentWeekStart, 'yyyy-MM-dd');
@@ -778,6 +801,33 @@ export default function Timeline({
             </Popover>
 
             <div className="appHeader__separator" aria-hidden="true" />
+          </div>
+
+          {/* Mobile only: day navigation replaces the spacer links */}
+          <div className="mobileNav" aria-label="Day navigation">
+            <button
+              className="mobileNav__btn"
+              type="button"
+              onClick={handlePrevious}
+              aria-label="Previous day"
+            >
+              <IconChevronLeft size={20} aria-hidden="true" />
+            </button>
+            <span className="mobileNav__date">
+              <span className="mobileNav__dow">{weekdayShort(currentWeekStart)}</span>
+              {' '}
+              <span className="mobileNav__day">{currentWeekStart.getDate()}</span>
+              {' '}
+              <span className="mobileNav__month">{monthShort(currentWeekStart)}</span>
+            </span>
+            <button
+              className="mobileNav__btn"
+              type="button"
+              onClick={handleNext}
+              aria-label="Next day"
+            >
+              <IconChevronRight size={20} aria-hidden="true" />
+            </button>
           </div>
 
           <div className="appHeader__spacer">
@@ -1302,8 +1352,8 @@ export default function Timeline({
           setFormError('');
         }}
         title={addMode ? t('timeline.drawer.addNewShiftTitle') : t('timeline.drawer.shiftDetailsTitle')}
-        position="right"
-        size={520}
+        position={isMobile ? 'bottom' : 'right'}
+        size={isMobile ? '100dvh' : 520}
         styles={{
           header: { paddingLeft: 24, paddingRight: 24 },
           body: { paddingLeft: 24, paddingRight: 24 },
