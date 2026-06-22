@@ -6,7 +6,7 @@ import { listBuses } from '../services/busesService';
 import { listDrivers } from '../services/driversService';
 import { sendApiError } from './apiError';
 
-const SHIFTS_TTL_MS = Number(process.env.CACHE_SHIFTS_TTL_MS || 15000);
+const SHIFTS_TTL_MS = Number(process.env.CACHE_SHIFTS_TTL_MS || 1_800_000); // 30 min default
 const AUTO_GENERATE_ON_READ = !['false', '0', 'no', 'off'].includes(
   String(process.env.AUTO_GENERATE_SHIFTS_ON_READ || 'true').trim().toLowerCase()
 );
