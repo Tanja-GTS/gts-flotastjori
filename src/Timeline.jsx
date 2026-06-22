@@ -107,6 +107,11 @@ export default function Timeline({
 
   const isMobile = useIsMobile();
 
+  // Computed once at mount — used to set initial state correctly so we don't
+  // fire onRangeChange twice (once with viewDays=7, then again after the effect).
+  const isMobileInit =
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
   const routes = selectRoutesForWorkspace(shifts, workspaceId);
   const routeOptions = routes.map((route) => ({ value: route, label: route }));
   const [selectedShiftToken, setSelectedShiftToken] = useState(null);
@@ -117,7 +122,7 @@ export default function Timeline({
   const [assigningMode, setAssigningMode] = useState(null);
   const [assignError, setAssignError] = useState('');
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
-  const [viewDays, setViewDays] = useState(7);
+  const [viewDays, setViewDays] = useState(isMobileInit ? 1 : 7);
   const [showNotes, setShowNotes] = useState(false);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [editedNote, setEditedNote] = useState('');
@@ -534,6 +539,9 @@ export default function Timeline({
     : [];
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const d = new Date();
+    if (isMobileInit) {
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff));
@@ -548,14 +556,6 @@ export default function Timeline({
     return new Date(today.getFullYear(), today.getMonth(), 1);
   }, []);
   const isRecordMonth = viewedMonthStart.getTime() < currentMonthStart.getTime();
-
-  // On mobile, lock to single-day view and jump to today.
-  useEffect(() => {
-    if (!isMobile) return;
-    setViewDays(1);
-    const t = new Date();
-    setCurrentWeekStart(new Date(t.getFullYear(), t.getMonth(), t.getDate()));
-  }, [isMobile]);
 
   useEffect(() => {
     if (!onRangeChange) return;
