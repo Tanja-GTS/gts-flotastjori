@@ -138,21 +138,19 @@
 
 .appHeader__brand {
   display: flex;
-  width: 63px;
   height: 57px;
-  padding: 10px;
+  padding: 14px 16px 14px 20px;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 10px;
   box-sizing: border-box;
   min-width: 0;
-  flex: 0 0 63px;
+  flex: 0 0 auto;
 }
 
 .appHeader__logo {
-  width: 35.05px;
-  height: 21.54px;
+  height: 29px;
+  width: auto;
   flex: 0 0 auto;
   display: block;
 }
@@ -1450,12 +1448,14 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
     min-height: 100dvh;
   }
 
-  /* Header: tighter side padding, hide desktop links/actions */
+  /* Header: tighter side padding, hide desktop links/actions, hide logo */
   .appHeader__inner {
     padding-right: 8px;
   }
   .appHeader__spacer,
-  .appHeader__right {
+  .appHeader__right,
+  .appHeader__brand,
+  .appHeader__left .appHeader__separator:nth-child(2) {
     display: none;
   }
 
