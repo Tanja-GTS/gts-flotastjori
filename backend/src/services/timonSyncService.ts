@@ -225,6 +225,12 @@ export async function syncTimonShiftAssignments(params: {
     const unassigned = Boolean(externalShift.unassigned) || !ssn;
 
     let matchedInstanceId = instanceIdByExternalShiftId.get(externalShiftId);
+    // If the stored external-id points to an instance that is no longer visible
+    // in the UI (e.g. linked to an expired/deleted pattern), fall through to
+    // score-based matching so we write to the instance managers can actually see.
+    if (matchedInstanceId && !hydratedById.has(matchedInstanceId)) {
+      matchedInstanceId = undefined;
+    }
     let via: TimonMatchResult['via'] = matchedInstanceId ? 'external-id' : 'unmatched';
     let matchedScore: number | undefined;
     let reason = '';
