@@ -20,6 +20,8 @@ function normalizeText(raw: unknown): string {
   return asString(raw)
     .trim()
     .toLowerCase()
+    // Strip seasonal suffixes so "51-A morgun - V" matches "51-A morgun"
+    .replace(/\s*-\s*[vw]\s*$/i, '')
     .replace(/\s+/g, ' ');
 }
 
