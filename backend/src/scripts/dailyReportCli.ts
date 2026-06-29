@@ -1,5 +1,6 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
+import { listHydratedShifts } from '../services/shiftInstancesService.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), 'backend', '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -103,8 +104,6 @@ async function main() {
 
   if (!apiKey) { console.error('[daily-report] BREVO_API_KEY not set — skipping'); process.exit(0); }
   if (!to)     { console.error('[daily-report] DAILY_REPORT_TO not set — skipping'); process.exit(0); }
-
-  const { listHydratedShifts } = await import('../services/shiftInstancesService.js') as any;
 
   const today    = todayIso();
   const tomorrow = tomorrowIso();
