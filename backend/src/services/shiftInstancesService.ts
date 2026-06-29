@@ -142,7 +142,11 @@ function dedupeHydratedShifts(shifts: HydratedShiftDto[]): HydratedShiftDto[] {
     if (score(s) > score(existing)) byKey.set(key, s);
   }
 
-  return [...byKey.values(), ...passthrough];
+  // Drop any winner whose pattern season explicitly excludes its date.
+  // score=0 means effectiveFrom/effectiveTo is set and the date falls outside it.
+  // score=1 (no season dates) and score=2 (correct season) are kept.
+  const seasonal = [...byKey.values()].filter((s) => patternSeasonScore(s) !== 0);
+  return [...seasonal, ...passthrough];
 }
 
 export async function deleteGeneratedShiftInstances(params: {
