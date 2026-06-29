@@ -12,6 +12,12 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function tomorrowIso(): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00Z`);
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -44,11 +50,55 @@ async function sendBrevoEmail(params: {
   }
 }
 
+const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
+
+const tableHeader = `
+  <tr style="background:#f5f5f5">
+    <th style="padding:8px 12px;text-align:left">Route</th>
+    <th style="padding:8px 12px;text-align:left">Type</th>
+    <th style="padding:8px 12px;text-align:left">Time</th>
+    <th style="padding:8px 12px;text-align:left">Driver</th>
+  </tr>`;
+
+function shiftRow(s: any, ok: boolean): string {
+  const type = LABEL[s.shiftType] || s.shiftType;
+  const color = ok ? '#1a7f37' : '#b91c1c';
+  const status = ok ? (s.driverName || '—') : '⚠️ Unassigned';
+  return `
+    <tr>
+      <td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:600">${s.route}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${type}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${s.time || ''}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'}">${status}</td>
+    </tr>`;
+}
+
+function daySection(label: string, date: string, shifts: any[]): string {
+  const unassigned = shifts.filter((s: any) => !s.driverId);
+  const assigned   = shifts.filter((s: any) =>  s.driverId);
+  const allGood    = unassigned.length === 0;
+
+  const statusColor = allGood ? '#1a7f37' : '#b91c1c';
+  const statusText  = allGood
+    ? `✅ All ${shifts.length} shifts assigned`
+    : `⚠️ ${unassigned.length} unassigned out of ${shifts.length}`;
+
+  const rows = [...unassigned, ...assigned].map((s) => shiftRow(s, !!s.driverId)).join('');
+
+  return `
+    <h2 style="margin-top:32px;margin-bottom:2px">${label}</h2>
+    <p style="color:#666;margin:0 0 8px">${formatDate(date)}</p>
+    <p style="font-weight:700;color:${statusColor};margin:0 0 12px">${statusText}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      ${tableHeader}${rows}
+    </table>`;
+}
+
 async function main() {
-  const apiKey = optionalEnv('BREVO_API_KEY');
-  const to = optionalEnv('DAILY_REPORT_TO');
+  const apiKey    = optionalEnv('BREVO_API_KEY');
+  const to        = optionalEnv('DAILY_REPORT_TO');
   const fromEmail = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
-  const fromName = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
+  const fromName  = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
   const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
 
   if (!apiKey) { console.error('[daily-report] BREVO_API_KEY not set — skipping'); process.exit(0); }
@@ -56,74 +106,41 @@ async function main() {
 
   const { listHydratedShifts } = await import('../services/shiftInstancesService.js') as any;
 
-  const today = todayIso();
-  const month = today.slice(0, 7);
-  const allShifts: any[] = await listHydratedShifts({ workspaceId, month });
-  const todayShifts = allShifts
-    .filter((s: any) => s.date?.slice(0, 10) === today)
-    .sort((a: any, b: any) => (a.route + a.shiftType).localeCompare(b.route + b.shiftType));
+  const today    = todayIso();
+  const tomorrow = tomorrowIso();
 
-  const unassigned = todayShifts.filter((s: any) => !s.driverId);
-  const assigned   = todayShifts.filter((s: any) =>  s.driverId);
-  const allGood    = unassigned.length === 0;
+  // Fetch months needed (today and tomorrow may span two months at month end)
+  const months = [...new Set([today.slice(0, 7), tomorrow.slice(0, 7)])];
+  const allShifts: any[] = (
+    await Promise.all(months.map((m: string) => listHydratedShifts({ workspaceId, month: m })))
+  ).flat();
 
-  const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
+  const shiftsFor = (date: string) =>
+    allShifts
+      .filter((s: any) => s.date?.slice(0, 10) === date)
+      .sort((a: any, b: any) => (a.route + a.shiftType).localeCompare(b.route + b.shiftType));
 
-  function shiftRow(s: any, ok: boolean): string {
-    const type = LABEL[s.shiftType] || s.shiftType;
-    const driver = s.driverName || '—';
-    const color = ok ? '#1a7f37' : '#b91c1c';
-    const status = ok ? driver : '⚠️ Unassigned';
-    return `
-      <tr>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:600">${s.route}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${type}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${s.time || ''}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'}">${status}</td>
-      </tr>`;
-  }
+  const todayShifts    = shiftsFor(today);
+  const tomorrowShifts = shiftsFor(tomorrow);
 
-  const tableHeader = `
-    <tr style="background:#f5f5f5">
-      <th style="padding:8px 12px;text-align:left">Route</th>
-      <th style="padding:8px 12px;text-align:left">Type</th>
-      <th style="padding:8px 12px;text-align:left">Time</th>
-      <th style="padding:8px 12px;text-align:left">Driver</th>
-    </tr>`;
+  const todayUnassigned    = todayShifts.filter((s: any) => !s.driverId).length;
+  const tomorrowUnassigned = tomorrowShifts.filter((s: any) => !s.driverId).length;
+  const totalUnassigned    = todayUnassigned + tomorrowUnassigned;
 
-  const unassignedRows = unassigned.map((s: any) => shiftRow(s, false)).join('');
-  const assignedRows   = assigned.map((s: any) => shiftRow(s, true)).join('');
-
-  const summaryColor = allGood ? '#1a7f37' : '#b91c1c';
-  const summaryText  = allGood
-    ? `✅ All ${todayShifts.length} shifts are assigned`
-    : `⚠️ ${unassigned.length} unassigned shift${unassigned.length > 1 ? 's' : ''} out of ${todayShifts.length}`;
-
-  const unassignedSection = unassigned.length > 0 ? `
-    <h3 style="color:#b91c1c;margin-top:24px">Unassigned shifts</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
-      ${tableHeader}${unassignedRows}
-    </table>` : '';
+  const subject = totalUnassigned === 0
+    ? `✅ All shifts assigned — ${formatDate(today)}`
+    : `⚠️ ${totalUnassigned} unassigned — ${formatDate(today)}`;
 
   const html = `
-    <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="margin-bottom:4px">Daily Shift Report</h2>
-      <p style="color:#666;margin-top:0">${formatDate(today)}</p>
-      <p style="font-size:16px;font-weight:700;color:${summaryColor}">${summaryText}</p>
-      ${unassignedSection}
-      <h3 style="margin-top:24px">All shifts today</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
-        ${tableHeader}${unassignedRows}${assignedRows}
-      </table>
-      <p style="color:#aaa;font-size:12px;margin-top:24px">Fleet Scheduler — automated daily report</p>
+    <div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;color:#111">
+      <h1 style="margin-bottom:0">Shift Report</h1>
+      ${daySection('Today', today, todayShifts)}
+      ${daySection('Tomorrow', tomorrow, tomorrowShifts)}
+      <p style="color:#aaa;font-size:12px;margin-top:32px">Fleet Scheduler — automated daily report</p>
     </div>`;
 
-  const subject = allGood
-    ? `✅ All shifts assigned — ${formatDate(today)}`
-    : `⚠️ ${unassigned.length} unassigned — ${formatDate(today)}`;
-
   await sendBrevoEmail({ apiKey, from: { email: fromEmail, name: fromName }, to, subject, html });
-  console.log(`[daily-report] Email sent to ${to} — ${summaryText}`);
+  console.log(`[daily-report] Sent to ${to} — today: ${todayUnassigned} unassigned, tomorrow: ${tomorrowUnassigned} unassigned`);
 }
 
 main().catch((err) => {
