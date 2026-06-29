@@ -1,12 +1,19 @@
-import path from 'node:path';
 import dotenv from 'dotenv';
-import { listHydratedShifts } from '../services/shiftInstancesService.js';
+import path from 'node:path';
 
 dotenv.config({ path: path.resolve(process.cwd(), 'backend', '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 function optionalEnv(key: string, fallback = '') {
   return (process.env[key] || fallback).trim();
+}
+
+async function fetchShiftsFromApi(appUrl: string, workspaceId: string, month: string): Promise<any[]> {
+  const url = `${appUrl}/api/shifts?workspaceId=${workspaceId}&month=${month}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`API error ${res.status} fetching shifts for ${month}`);
+  const data = await res.json() as any;
+  return data.shifts || [];
 }
 
 function todayIso(): string {
@@ -98,9 +105,10 @@ function daySection(label: string, date: string, shifts: any[]): string {
 async function main() {
   const apiKey    = optionalEnv('BREVO_API_KEY');
   const to        = optionalEnv('DAILY_REPORT_TO');
-  const fromEmail = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
-  const fromName  = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
+  const fromEmail   = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
+  const fromName    = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
   const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
+  const appUrl      = optionalEnv('APP_URL', 'https://gts-flotastjori.onrender.com');
 
   if (!apiKey) { console.error('[daily-report] BREVO_API_KEY not set — skipping'); process.exit(0); }
   if (!to)     { console.error('[daily-report] DAILY_REPORT_TO not set — skipping'); process.exit(0); }
@@ -111,7 +119,7 @@ async function main() {
   // Fetch months needed (today and tomorrow may span two months at month end)
   const months = [...new Set([today.slice(0, 7), tomorrow.slice(0, 7)])];
   const allShifts: any[] = (
-    await Promise.all(months.map((m: string) => listHydratedShifts({ workspaceId, month: m })))
+    await Promise.all(months.map((m: string) => fetchShiftsFromApi(appUrl, workspaceId, m)))
   ).flat();
 
   const shiftsFor = (date: string) =>
