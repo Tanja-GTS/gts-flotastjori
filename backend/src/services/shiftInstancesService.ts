@@ -1167,14 +1167,12 @@ export async function listHydratedShifts(params: {
   const requestedWorkspaceId = normalizeWorkspaceSlug(params.workspaceId);
 
   // Fetch instances and patterns in parallel — they are fully independent.
-  // IMPORTANT: don't scope patterns by workspace here — instances can reference patterns from a
-  // different workspace (older generated items, manual items, untagged patterns). Scoping by
-  // workspace would silently hide those shifts.
-  // DO apply date-based filtering when a month is provided so seasonal patterns (e.g. Summer
-  // Schedule) are hidden for months outside their effectiveFrom/effectiveTo window.
+  // Load ALL patterns regardless of effectiveFrom/effectiveTo so that any
+  // instance stored in SharePoint can be hydrated and shown. The instances in
+  // SharePoint are the source of truth; we don't filter by season here.
   const [instances, patterns] = await Promise.all([
     params.prefetchedInstances ? Promise.resolve(params.prefetchedInstances) : listShiftInstances(params),
-    listShiftPatterns({ month: params.month }),
+    listShiftPatterns(),
   ]);
   const byId = new Map(patterns.map((p) => [p.id, p]));
 
@@ -1194,20 +1192,6 @@ export async function listHydratedShifts(params: {
       const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
       if (!pattern) return null;
 
-      // Drop instances whose specific date falls outside the pattern's effective range.
-      // isPatternActiveForMonth allows both patterns in a transition month (e.g. June),
-      // so we need day-level filtering here to prevent winter shifts showing on summer dates.
-      if (inst.date && (pattern.effectiveFrom || pattern.effectiveTo)) {
-        const instDate = new Date(inst.date.split('T')[0] + 'T12:00:00');
-        if (pattern.effectiveFrom) {
-          const from = new Date(pattern.effectiveFrom.split('T')[0] + 'T00:00:00');
-          if (instDate < from) return null;
-        }
-        if (pattern.effectiveTo) {
-          const to = new Date(pattern.effectiveTo.split('T')[0] + 'T23:59:59');
-          if (instDate > to) return null;
-        }
-      }
 
       const patternWorkspaceId = normalizeWorkspaceSlug((pattern as any).workspaceId);
 
