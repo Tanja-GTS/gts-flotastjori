@@ -9,6 +9,7 @@
     "graph:test": "tsx src/scripts/graphTest.ts",
     "generate:shifts": "tsx src/scripts/generateShiftsCli.ts",
     "timon:sync": "tsx src/scripts/timonSyncCli.ts",
+    "daily:report": "tsx src/scripts/dailyReportCli.ts",
     "backup:lists": "tsx src/scripts/backupListsCli.ts",
     "warmup:cache": "tsx src/scripts/warmupCache.ts",
     "start": "tsx src/server.ts",
