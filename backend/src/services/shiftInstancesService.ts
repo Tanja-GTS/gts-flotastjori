@@ -54,6 +54,8 @@ export type HydratedShiftDto = {
   // Optional label from the pattern (ex: "weekdays" / "weekend")
   weekPart?: string;
   season?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
   name: string;
   time: string; // "HH:mm–HH:mm"
   defaultBus?: string;
@@ -89,34 +91,55 @@ function pickEffectiveWorkspaceId(instanceWorkspaceId: string, patternWorkspaceI
   return pat;
 }
 
+function patternSeasonScore(shift: HydratedShiftDto): number {
+  // Returns how well this instance's pattern season covers its date.
+  // Higher = more appropriate for the date.
+  //   2 = pattern has season dates and they cover this instance's date (perfect)
+  //   1 = pattern has no season dates (always active, neutral)
+  //   0 = pattern has season dates but they don't cover this date (wrong season)
+  const p = shift as any;
+  const hasSeasonDates = p.effectiveFrom || p.effectiveTo;
+  if (!hasSeasonDates) return 1;
+  if (!shift.date) return 1;
+  const instDate = new Date(shift.date.split('T')[0] + 'T12:00:00');
+  if (p.effectiveFrom) {
+    const from = new Date(p.effectiveFrom.split('T')[0] + 'T00:00:00');
+    if (instDate < from) return 0;
+  }
+  if (p.effectiveTo) {
+    const to = new Date(p.effectiveTo.split('T')[0] + 'T23:59:59');
+    if (instDate > to) return 0;
+  }
+  return 2;
+}
+
 function dedupeHydratedShifts(shifts: HydratedShiftDto[]): HydratedShiftDto[] {
   const byKey = new Map<string, HydratedShiftDto>();
   const passthrough: HydratedShiftDto[] = [];
 
   for (const s of shifts) {
-    if (!s.workspaceId || !s.date || !s.patternId) {
+    if (!s.workspaceId || !s.date || !s.route || !s.shiftType) {
       passthrough.push(s);
       continue;
     }
 
-    const key = `${s.workspaceId}|${s.date}|${s.patternId}`;
+    // Key by route+shiftType+date so winter and summer instances for the same
+    // slot are treated as duplicates and the seasonally correct one wins.
+    const key = `${s.workspaceId}|${s.date}|${s.route}|${s.shiftType}`;
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, s);
       continue;
     }
 
-    // Prefer manual overrides, then assigned drivers, then notes.
     const score = (x: HydratedShiftDto) => {
-      let v = 0;
+      let v = patternSeasonScore(x) * 1000; // season fit is the primary decider
       if (x.manualOverride) v += 100;
       if (x.driverId) v += 20;
       if (x.notes && String(x.notes).trim()) v += 1;
       return v;
     };
-    const a = existing;
-    const b = s;
-    byKey.set(key, score(b) > score(a) ? b : a);
+    if (score(s) > score(existing)) byKey.set(key, s);
   }
 
   return [...byKey.values(), ...passthrough];
@@ -1230,6 +1253,8 @@ export async function listHydratedShifts(params: {
         defaultBus: inst.busId ? busTitles.get(inst.busId) || inst.busId : undefined,
         trips: inst.templateId ? tripsByTemplateId.get(inst.templateId) || [] : [],
         season: pattern.season,
+        effectiveFrom: pattern.effectiveFrom,
+        effectiveTo: pattern.effectiveTo,
       };
 
       if (patternWorkspaceId) base.patternWorkspaceId = patternWorkspaceId;
