@@ -52,10 +52,11 @@ async function sendBrevoEmail(params: {
     }),
     signal: AbortSignal.timeout(15000),
   });
+  const body = await res.text().catch(() => '');
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
     throw new Error(`Brevo error ${res.status}: ${body}`);
   }
+  console.log(`[daily-report] Brevo response ${res.status}:`, body);
 }
 
 const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
