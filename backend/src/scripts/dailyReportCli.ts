@@ -1,12 +1,29 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
-import { listHydratedShifts } from '../services/shiftInstancesService.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), 'backend', '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 function optionalEnv(key: string, fallback = '') {
   return (process.env[key] || fallback).trim();
+}
+
+async function wakeAndFetch(appUrl: string, workspaceId: string, month: string): Promise<any[]> {
+  // Wake the server first — keep pinging until it responds (up to 3 min)
+  const start = Date.now();
+  while (Date.now() - start < 180_000) {
+    try {
+      const r = await fetch(`${appUrl}/api/health`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) break;
+    } catch { /* still waking, keep trying */ }
+    await new Promise(res => setTimeout(res, 5000));
+  }
+  // Now fetch shifts — server is awake so should be fast
+  const url = `${appUrl}/api/shifts?workspaceId=${workspaceId}&month=${month}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`API error ${res.status} for ${month}`);
+  const data = await res.json() as any;
+  return data.shifts || [];
 }
 
 function todayIso(): string {
@@ -102,6 +119,7 @@ async function main() {
   const fromEmail   = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
   const fromName    = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
   const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
+  const appUrl      = optionalEnv('APP_URL', 'https://gts-flotastjori.onrender.com');
 
   if (!apiKey) { console.error('[daily-report] MAILERLITE_API_KEY not set — skipping'); process.exit(0); }
   if (!to)     { console.error('[daily-report] DAILY_REPORT_TO not set — skipping'); process.exit(0); }
@@ -109,10 +127,10 @@ async function main() {
   const today    = todayIso();
   const tomorrow = tomorrowIso();
 
-  console.log('[daily-report] Fetching shifts from SharePoint...');
+  console.log('[daily-report] Waking server and fetching shifts...');
   const months = [...new Set([today.slice(0, 7), tomorrow.slice(0, 7)])];
   const allShifts: any[] = (
-    await Promise.all(months.map((m: string) => listHydratedShifts({ workspaceId, month: m })))
+    await Promise.all(months.map((m: string) => wakeAndFetch(appUrl, workspaceId, m)))
   ).flat();
 
   const shiftsFor = (date: string) =>
