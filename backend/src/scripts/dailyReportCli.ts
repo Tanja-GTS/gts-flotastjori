@@ -31,32 +31,32 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-async function sendBrevoEmail(params: {
+async function sendEmail(params: {
   apiKey: string;
   from: { email: string; name?: string };
   to: string;
   subject: string;
   html: string;
 }): Promise<void> {
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+  const res = await fetch('https://connect.mailerlite.com/api/emails', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'api-key': params.apiKey,
+      'Authorization': `Bearer ${params.apiKey}`,
     },
     body: JSON.stringify({
-      sender: { email: params.from.email, name: params.from.name || 'Fleet Scheduler' },
+      from: { email: params.from.email, name: params.from.name || 'Fleet Scheduler' },
       to: [{ email: params.to }],
       subject: params.subject,
-      htmlContent: params.html,
+      html: params.html,
     }),
     signal: AbortSignal.timeout(15000),
   });
   const body = await res.text().catch(() => '');
   if (!res.ok) {
-    throw new Error(`Brevo error ${res.status}: ${body}`);
+    throw new Error(`MailerLite error ${res.status}: ${body}`);
   }
-  console.log(`[daily-report] Brevo response ${res.status}:`, body);
+  console.log(`[daily-report] MailerLite response ${res.status}:`, body);
 }
 
 const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
@@ -104,14 +104,14 @@ function daySection(label: string, date: string, shifts: any[]): string {
 }
 
 async function main() {
-  const apiKey    = optionalEnv('BREVO_API_KEY');
-  const to        = optionalEnv('DAILY_REPORT_TO');
+  const apiKey      = optionalEnv('MAILERLITE_API_KEY');
+  const to          = optionalEnv('DAILY_REPORT_TO');
   const fromEmail   = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
   const fromName    = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
   const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
   const appUrl      = optionalEnv('APP_URL', 'https://gts-flotastjori.onrender.com');
 
-  if (!apiKey) { console.error('[daily-report] BREVO_API_KEY not set — skipping'); process.exit(0); }
+  if (!apiKey) { console.error('[daily-report] MAILERLITE_API_KEY not set — skipping'); process.exit(0); }
   if (!to)     { console.error('[daily-report] DAILY_REPORT_TO not set — skipping'); process.exit(0); }
 
   const today    = todayIso();
@@ -147,7 +147,7 @@ async function main() {
       <p style="color:#aaa;font-size:12px;margin-top:32px">Fleet Scheduler — automated daily report</p>
     </div>`;
 
-  await sendBrevoEmail({ apiKey, from: { email: fromEmail, name: fromName }, to, subject, html });
+  await sendEmail({ apiKey, from: { email: fromEmail, name: fromName }, to, subject, html });
   console.log(`[daily-report] Sent to ${to} — today: ${todayUnassigned} unassigned, tomorrow: ${tomorrowUnassigned} unassigned`);
 }
 
