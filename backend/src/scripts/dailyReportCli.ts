@@ -8,22 +8,40 @@ function optionalEnv(key: string, fallback = '') {
   return (process.env[key] || fallback).trim();
 }
 
-async function wakeAndFetch(appUrl: string, workspaceId: string, month: string): Promise<any[]> {
-  // Wake the server first — keep pinging until it responds (up to 3 min)
+async function wakeServer(appUrl: string): Promise<void> {
+  console.log('[daily-report] Waking server...');
   const start = Date.now();
   while (Date.now() - start < 180_000) {
     try {
       const r = await fetch(`${appUrl}/api/health`, { signal: AbortSignal.timeout(10000) });
-      if (r.ok) break;
-    } catch { /* still waking, keep trying */ }
+      if (r.ok) {
+        // Give the server a few extra seconds to fully initialise after health check passes
+        await new Promise(res => setTimeout(res, 5000));
+        console.log('[daily-report] Server awake.');
+        return;
+      }
+    } catch { /* still waking */ }
     await new Promise(res => setTimeout(res, 5000));
   }
-  // Now fetch shifts — server is awake so should be fast
+}
+
+async function fetchMonth(appUrl: string, workspaceId: string, month: string): Promise<any[]> {
   const url = `${appUrl}/api/shifts?workspaceId=${workspaceId}&month=${month}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
-  if (!res.ok) throw new Error(`API error ${res.status} for ${month}`);
-  const data = await res.json() as any;
-  return data.shifts || [];
+  // Retry up to 3 times on 502/503 (server still starting)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+    if (res.ok) {
+      const data = await res.json() as any;
+      return data.shifts || [];
+    }
+    if (res.status === 502 || res.status === 503) {
+      console.log(`[daily-report] ${res.status} on ${month}, retrying in 10s...`);
+      await new Promise(r => setTimeout(r, 10000));
+      continue;
+    }
+    throw new Error(`API error ${res.status} for ${month}`);
+  }
+  throw new Error(`API still returning 502/503 for ${month} after retries`);
 }
 
 function todayIso(): string {
@@ -127,10 +145,10 @@ async function main() {
   const today    = todayIso();
   const tomorrow = tomorrowIso();
 
-  console.log('[daily-report] Waking server and fetching shifts...');
+  await wakeServer(appUrl);
   const months = [...new Set([today.slice(0, 7), tomorrow.slice(0, 7)])];
   const allShifts: any[] = (
-    await Promise.all(months.map((m: string) => wakeAndFetch(appUrl, workspaceId, m)))
+    await Promise.all(months.map((m: string) => fetchMonth(appUrl, workspaceId, m)))
   ).flat();
 
   const shiftsFor = (date: string) =>
