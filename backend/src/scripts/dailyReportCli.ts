@@ -10,18 +10,13 @@ function optionalEnv(key: string, fallback = '') {
 
 async function wakeServer(appUrl: string): Promise<void> {
   console.log('[daily-report] Waking server...');
-  const start = Date.now();
-  while (Date.now() - start < 180_000) {
-    try {
-      const r = await fetch(`${appUrl}/api/health`, { signal: AbortSignal.timeout(10000) });
-      if (r.ok) {
-        // Give the server a few extra seconds to fully initialise after health check passes
-        await new Promise(res => setTimeout(res, 5000));
-        console.log('[daily-report] Server awake.');
-        return;
-      }
-    } catch { /* still waking */ }
-    await new Promise(res => setTimeout(res, 5000));
+  // Use a long timeout — Render free tier can take 60s+ to wake from sleep
+  try {
+    await fetch(`${appUrl}/api/health`, { signal: AbortSignal.timeout(120_000) });
+    await new Promise(res => setTimeout(res, 3000)); // let it fully initialise
+    console.log('[daily-report] Server awake.');
+  } catch {
+    console.log('[daily-report] Health check timed out, continuing anyway...');
   }
 }
 
@@ -29,7 +24,7 @@ async function fetchMonth(appUrl: string, workspaceId: string, month: string): P
   const url = `${appUrl}/api/shifts?workspaceId=${workspaceId}&month=${month}`;
   // Retry up to 3 times on 502/503 (server still starting)
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
     if (res.ok) {
       const data = await res.json() as any;
       return data.shifts || [];
