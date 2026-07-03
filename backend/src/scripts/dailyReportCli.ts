@@ -8,9 +8,19 @@ function optionalEnv(key: string, fallback = '') {
   return (process.env[key] || fallback).trim();
 }
 
+async function wakeServer(appUrl: string): Promise<void> {
+  // Hit the health endpoint first so the server is fully awake before
+  // we make the heavier shifts request.
+  try {
+    await fetch(`${appUrl}/api/health`, { signal: AbortSignal.timeout(90000) });
+  } catch {
+    // ignore — shifts request will surface any real error
+  }
+}
+
 async function fetchShiftsFromApi(appUrl: string, workspaceId: string, month: string): Promise<any[]> {
   const url = `${appUrl}/api/shifts?workspaceId=${workspaceId}&month=${month}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(120000) });
   if (!res.ok) throw new Error(`API error ${res.status} fetching shifts for ${month}`);
   const data = await res.json() as any;
   return data.shifts || [];
@@ -116,6 +126,10 @@ async function main() {
 
   const today    = todayIso();
   const tomorrow = tomorrowIso();
+
+  console.log('[daily-report] Waking server...');
+  await wakeServer(appUrl);
+  console.log('[daily-report] Fetching shifts...');
 
   // Fetch months needed (today and tomorrow may span two months at month end)
   const months = [...new Set([today.slice(0, 7), tomorrow.slice(0, 7)])];
