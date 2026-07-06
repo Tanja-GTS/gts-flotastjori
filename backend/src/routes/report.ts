@@ -81,7 +81,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       <p style="color:#aaa;font-size:12px;margin-top:32px">Fleet Scheduler — automated daily report</p>
     </div>`;
 
-    const mailRes = await fetch('https://connect.mailerlite.com/api/emails', {
+    const mailRes = await fetch('https://api.mailersend.com/v1/email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -95,7 +95,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
 
     if (!mailRes.ok) {
       const body = await mailRes.text();
-      res.status(500).json({ ok: false, reason: `MailerLite ${mailRes.status}: ${body}` });
+      res.status(500).json({ ok: false, reason: `MailerSend ${mailRes.status}: ${body}` });
       return;
     }
 
