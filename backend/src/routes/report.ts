@@ -56,6 +56,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       res.json({ ok: false, reason: 'MAILERLITE_API_KEY or DAILY_REPORT_TO not configured' });
       return;
     }
+    console.log(`[report] sending from=${fromEmail} to=${to} apiKeyPrefix=${apiKey.slice(0, 8)}`);
 
     const today    = todayIso();
     const tomorrow = tomorrowIso();
