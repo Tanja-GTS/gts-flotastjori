@@ -7,6 +7,7 @@ import { busesRouter } from './buses';
 import { driversRouter } from './drivers';
 import { timonRouter } from './timon';
 import { workspacesRouter } from './workspaces';
+import { reportRouter } from './report';
 
 export const apiRouter = Router();
 
@@ -21,6 +22,7 @@ apiRouter.use('/buses', busesRouter);
 apiRouter.use('/drivers', driversRouter);
 apiRouter.use('/timon', timonRouter);
 apiRouter.use('/workspaces', workspacesRouter);
+apiRouter.use('/report', reportRouter);
 
 function boolEnv(name: string): boolean {
   const raw = String(process.env[name] || '').trim().toLowerCase();
