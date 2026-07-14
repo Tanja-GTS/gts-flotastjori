@@ -28,25 +28,19 @@ function scheduleLabel(shifts: any[]): string {
   return name.charAt(0).toUpperCase() + name.slice(1) + ' Schedule';
 }
 
-function seasonBg(label: string): string {
-  const l = label.toLowerCase();
-  if (l.includes('summer')) return '#d97706';
-  if (l.includes('winter')) return '#1e3a8a';
-  return '#374151';
-}
+const ICON_B64 = 'PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZD0iTTQuMjUgNS41QzMuODM1NzkgNS41IDMuNSA1LjgzNTc5IDMuNSA2LjI1VjE0Ljc1QzMuNSAxNS4xNjQyIDMuODM1NzkgMTUuNSA0LjI1IDE1LjVIMTIuNzVDMTMuMTY0MiAxNS41IDEzLjUgMTUuMTY0MiAxMy41IDE0Ljc1VjEwLjc1QzEzLjUgMTAuMzM1OCAxMy44MzU4IDEwIDE0LjI1IDEwQzE0LjY2NDIgMTAgMTUgMTAuMzM1OCAxNSAxMC43NVYxNC43NUMxNSAxNS45OTI2IDEzLjk5MjYgMTcgMTIuNzUgMTdINC4yNUMzLjAwNzM2IDE3IDIgMTUuOTkyNiAyIDE0Ljc1VjYuMjVDMiA1LjAwNzM2IDMuMDA3MzYgNCA0LjI1IDRIOS4yNUM5LjY2NDIxIDQgMTAgNC4zMzU3OSAxMCA0Ljc1QzEwIDUuMTY0MjEgOS42NjQyMSA1LjUgOS4yNSA1LjVINC4yNVoiIGZpbGw9IndoaXRlIi8+PHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02LjE5Mzg1IDEyLjc1MzJDNi40NzE3NSAxMy4wNjAzIDYuOTQ2MDMgMTMuMDg0MSA3LjI1MzE5IDEyLjgwNjJMMTYuNSA0LjQzOTk5VjcuMjVDMTYuNSA3LjY2NDIxIDE2LjgzNTggOCAxNy4yNSA4QzE3LjY2NDIgOCAxOCA3LjY2NDIxIDE4IDcuMjVWMi43NUMxOCAyLjMzNTc5IDE3LjY2NDIgMiAxNy4yNSAySDEyLjc1QzEyLjMzNTggMiAxMiAyLjMzNTc5IDEyIDIuNzVDMTIgMy4xNjQyMSAxMi4zMzU4IDMuNSAxMi43NSAzLjVIMTUuMzAzMkw2LjI0NjgyIDExLjY5MzhDNS45Mzk2NiAxMS45NzE3IDUuOTE1OTUgMTIuNDQ2IDYuMTkzODUgMTIuNzUzMloiIGZpbGw9IndoaXRlIi8+PC9zdmc+';
 
 function seasonPill(label: string): string {
-  const bg = seasonBg(label);
   return `<table cellpadding="0" cellspacing="0" border="0" style="display:inline-table;vertical-align:middle;margin-left:12px">
-    <tr><td bgcolor="${bg}" style="border-radius:20px;background:${bg};padding:5px 16px">
-      <span style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#ffffff;white-space:nowrap">${label}</span>
+    <tr><td bgcolor="#64DBD6" style="border-radius:8px;background:#64DBD6;padding:10px">
+      <span style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;color:#111111;white-space:nowrap">${label}</span>
     </td></tr>
   </table>`;
 }
 
 const ctaButton = `<table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:32px">
-  <tr><td bgcolor="#111111" style="border-radius:8px;background:#111111">
-    <a href="https://gts-flotastjori.onrender.com" style="display:block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;white-space:nowrap">See full schedule &#8599;</a>
+  <tr><td bgcolor="#151922" style="border-radius:20px;background:#151922;padding:10px 24px">
+    <a href="https://gts-flotastjori.onrender.com" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;white-space:nowrap">See full schedule &nbsp;<img src="data:image/svg+xml;base64,${ICON_B64}" width="16" height="16" alt="" style="border:0;vertical-align:middle;margin-left:0"></a>
   </td></tr>
 </table>`;
 
