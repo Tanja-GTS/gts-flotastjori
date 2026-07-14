@@ -15,6 +15,33 @@ function formatDate(iso: string): string {
 }
 
 const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
+
+function scheduleLabel(shifts: any[]): string {
+  const counts: Record<string, number> = {};
+  for (const s of shifts) {
+    const key = String(s.season || '').trim().toLowerCase();
+    if (key) counts[key] = (counts[key] || 0) + 1;
+  }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return 'Standard Schedule';
+  const name = entries[0][0];
+  return name.charAt(0).toUpperCase() + name.slice(1) + ' Schedule';
+}
+
+function seasonColor(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes('summer')) return '#b45309';
+  if (l.includes('winter')) return '#1a5fb4';
+  return '#111';
+}
+
+function scheduleBanner(todayShifts: any[], tomorrowShifts: any[]): string {
+  const todayLabel    = scheduleLabel(todayShifts);
+  const tomorrowLabel = scheduleLabel(tomorrowShifts);
+  return `<p style="margin:16px 0 24px;font-size:15px">
+    Schedule: <strong style="color:${seasonColor(todayLabel)}">${todayLabel}</strong> today &nbsp;·&nbsp; <strong style="color:${seasonColor(tomorrowLabel)}">${tomorrowLabel}</strong> tomorrow
+  </p>`;
+}
 const tableHeader = `<tr style="background:#f5f5f5">
   <th style="padding:8px 12px;text-align:left">Route</th>
   <th style="padding:8px 12px;text-align:left">Type</th>
@@ -77,6 +104,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
 
     const html = `<div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;color:#111">
       <h1 style="margin-bottom:0">Shift Report</h1>
+      ${scheduleBanner(todayShifts, tomorrowShifts)}
       ${daySection('Today', today, todayShifts)}
       ${daySection('Tomorrow', tomorrow, tomorrowShifts)}
       <p style="color:#aaa;font-size:12px;margin-top:32px">Fleet Scheduler — automated daily report</p>
