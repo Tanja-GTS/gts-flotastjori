@@ -30,25 +30,30 @@ function scheduleLabel(shifts: any[]): string {
 }
 
 reportRouter.get('/preview', async (_req: Request, res: Response) => {
-  const today    = todayIso();
-  const tomorrow = tomorrowIso();
-  const html = await render(createElement(DailyReport, {
-    todayDate:      today,
-    tomorrowDate:   tomorrow,
-    todayShifts:    [
-      { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
-      { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
-      { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: null, driverName: null },
-    ],
-    tomorrowShifts: [
-      { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
-      { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
-    ],
-    todayLabel:     'Winter Schedule',
-    tomorrowLabel:  'Summer Schedule',
-  }));
-  res.setHeader('Content-Type', 'text/html');
-  res.send(html);
+  try {
+    const today    = todayIso();
+    const tomorrow = tomorrowIso();
+    const html = await render(createElement(DailyReport, {
+      todayDate:      today,
+      tomorrowDate:   tomorrow,
+      todayShifts:    [
+        { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
+        { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
+        { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: null, driverName: null },
+      ],
+      tomorrowShifts: [
+        { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
+        { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
+      ],
+      todayLabel:     'Winter Schedule',
+      tomorrowLabel:  'Summer Schedule',
+    }));
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).send(`<pre>Render error: ${msg}</pre>`);
+  }
 });
 
 reportRouter.post('/daily', async (_req: Request, res: Response) => {
