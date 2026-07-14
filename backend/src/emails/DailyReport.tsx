@@ -1,7 +1,7 @@
 import * as React from 'react';
 import {
   Html, Head, Body, Container, Section,
-  Text, Button, Row, Column,
+  Text, Button,
 } from '@react-email/components';
 
 const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
@@ -12,11 +12,18 @@ function formatDate(iso: string): string {
   });
 }
 
+function pillColor(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes('summer')) return '#FCD34D';
+  if (l.includes('winter')) return '#64DBD6';
+  return '#E5E7EB';
+}
+
 function SchedulePill({ label }: { label: string }) {
   return (
     <span style={{
       display: 'inline-block',
-      background: '#64DBD6',
+      background: pillColor(label),
       color: '#111111',
       fontSize: '12px',
       fontWeight: 600,
