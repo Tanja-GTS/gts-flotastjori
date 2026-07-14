@@ -28,19 +28,10 @@ function scheduleLabel(shifts: any[]): string {
   return name.charAt(0).toUpperCase() + name.slice(1) + ' Schedule';
 }
 
-function seasonColor(label: string): string {
+function seasonPill(label: string): string {
   const l = label.toLowerCase();
-  if (l.includes('summer')) return '#b45309';
-  if (l.includes('winter')) return '#1a5fb4';
-  return '#111';
-}
-
-function scheduleBanner(todayShifts: any[], tomorrowShifts: any[]): string {
-  const todayLabel    = scheduleLabel(todayShifts);
-  const tomorrowLabel = scheduleLabel(tomorrowShifts);
-  return `<p style="margin:16px 0 24px;font-size:15px">
-    Schedule: <strong style="color:${seasonColor(todayLabel)}">${todayLabel}</strong> today &nbsp;·&nbsp; <strong style="color:${seasonColor(tomorrowLabel)}">${tomorrowLabel}</strong> tomorrow
-  </p>`;
+  const bg = l.includes('summer') ? '#d97706' : l.includes('winter') ? '#1a5fb4' : '#555';
+  return `<span style="display:inline-block;background:${bg};color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;vertical-align:middle;margin-left:10px">${label}</span>`;
 }
 const tableHeader = `<tr style="background:#f5f5f5">
   <th style="padding:8px 12px;text-align:left">Route</th>
@@ -57,7 +48,7 @@ function shiftRow(s: any, ok: boolean): string {
     <td style="padding:6px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'}">${ok ? (s.driverName || '—') : '⚠️ Unassigned'}</td></tr>`;
 }
 
-function daySection(label: string, date: string, shifts: any[]): string {
+function daySection(label: string, date: string, shifts: any[], seasonLabel: string): string {
   const unassigned = shifts.filter((s: any) => !s.driverId);
   const allGood = unassigned.length === 0;
   const statusColor = allGood ? '#1a7f37' : '#b91c1c';
@@ -65,7 +56,7 @@ function daySection(label: string, date: string, shifts: any[]): string {
     ? `✅ All ${shifts.length} shifts assigned`
     : `⚠️ ${unassigned.length} unassigned out of ${shifts.length}`;
   const rows = [...unassigned, ...shifts.filter((s: any) => s.driverId)].map((s) => shiftRow(s, !!s.driverId)).join('');
-  return `<h2 style="margin-top:32px;margin-bottom:2px">${label}</h2>
+  return `<h2 style="margin-top:32px;margin-bottom:2px">${label}${seasonPill(seasonLabel)}</h2>
     <p style="color:#666;margin:0 0 8px">${formatDate(date)}</p>
     <p style="font-weight:700;color:${statusColor};margin:0 0 12px">${statusText}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">${tableHeader}${rows}</table>`;
@@ -103,10 +94,10 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       : `⚠️ ${totalUnassigned} unassigned — ${formatDate(today)}`;
 
     const html = `<div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;color:#111">
+      <p style="margin:0 0 24px"><a href="https://gts-flotastjori.onrender.com" style="display:inline-block;background:#111;color:#fff;font-size:14px;font-weight:600;padding:8px 18px;border-radius:6px;text-decoration:none">Go to full schedule →</a></p>
       <h1 style="margin-bottom:0">Shift Report</h1>
-      ${scheduleBanner(todayShifts, tomorrowShifts)}
-      ${daySection('Today', today, todayShifts)}
-      ${daySection('Tomorrow', tomorrow, tomorrowShifts)}
+      ${daySection('Today', today, todayShifts, scheduleLabel(todayShifts))}
+      ${daySection('Tomorrow', tomorrow, tomorrowShifts, scheduleLabel(tomorrowShifts))}
       <p style="color:#aaa;font-size:12px;margin-top:32px">Fleet Scheduler — automated daily report</p>
     </div>`;
 
