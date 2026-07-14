@@ -28,24 +28,41 @@ function scheduleLabel(shifts: any[]): string {
   return name.charAt(0).toUpperCase() + name.slice(1) + ' Schedule';
 }
 
-function seasonPill(label: string): string {
+function seasonBg(label: string): string {
   const l = label.toLowerCase();
-  const bg = l.includes('summer') ? '#d97706' : l.includes('winter') ? '#1a5fb4' : '#555';
-  return `<span style="display:inline-block;background:${bg};color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;vertical-align:middle;margin-left:10px">${label}</span>`;
+  if (l.includes('summer')) return '#d97706';
+  if (l.includes('winter')) return '#1e3a8a';
+  return '#374151';
 }
-const tableHeader = `<tr style="background:#f5f5f5">
-  <th style="padding:8px 12px;text-align:left">Route</th>
-  <th style="padding:8px 12px;text-align:left">Type</th>
-  <th style="padding:8px 12px;text-align:left">Time</th>
-  <th style="padding:8px 12px;text-align:left">Driver</th></tr>`;
+
+function seasonPill(label: string): string {
+  const bg = seasonBg(label);
+  return `<table cellpadding="0" cellspacing="0" border="0" style="display:inline-table;vertical-align:middle;margin-left:12px">
+    <tr><td bgcolor="${bg}" style="border-radius:20px;background:${bg};padding:5px 16px">
+      <span style="font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#ffffff;white-space:nowrap">${label}</span>
+    </td></tr>
+  </table>`;
+}
+
+const ctaButton = `<table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:32px">
+  <tr><td bgcolor="#111111" style="border-radius:8px;background:#111111">
+    <a href="https://gts-flotastjori.onrender.com" style="display:block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;white-space:nowrap">See full schedule &#8599;</a>
+  </td></tr>
+</table>`;
+
+const tableHeader = `<tr bgcolor="#f5f5f5" style="background:#f5f5f5">
+  <th style="padding:8px 12px;text-align:left;font-family:Arial,Helvetica,sans-serif">Route</th>
+  <th style="padding:8px 12px;text-align:left;font-family:Arial,Helvetica,sans-serif">Type</th>
+  <th style="padding:8px 12px;text-align:left;font-family:Arial,Helvetica,sans-serif">Time</th>
+  <th style="padding:8px 12px;text-align:left;font-family:Arial,Helvetica,sans-serif">Driver</th></tr>`;
 
 function shiftRow(s: any, ok: boolean): string {
   const color = ok ? '#1a7f37' : '#b91c1c';
   return `<tr>
-    <td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:600">${s.route}</td>
-    <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${LABEL[s.shiftType] || s.shiftType}</td>
-    <td style="padding:6px 12px;border-bottom:1px solid #eee;color:#555">${s.time || ''}</td>
-    <td style="padding:6px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'}">${ok ? (s.driverName || '—') : '⚠️ Unassigned'}</td></tr>`;
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;font-weight:600;font-family:Arial,Helvetica,sans-serif">${s.route}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:#555;font-family:Arial,Helvetica,sans-serif">${LABEL[s.shiftType] || s.shiftType}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:#555;font-family:Arial,Helvetica,sans-serif">${s.time || ''}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'};font-family:Arial,Helvetica,sans-serif">${ok ? (s.driverName || '—') : '⚠️ Unassigned'}</td></tr>`;
 }
 
 function daySection(label: string, date: string, shifts: any[], seasonLabel: string): string {
@@ -56,10 +73,15 @@ function daySection(label: string, date: string, shifts: any[], seasonLabel: str
     ? `✅ All ${shifts.length} shifts assigned`
     : `⚠️ ${unassigned.length} unassigned out of ${shifts.length}`;
   const rows = [...unassigned, ...shifts.filter((s: any) => s.driverId)].map((s) => shiftRow(s, !!s.driverId)).join('');
-  return `<h2 style="margin-top:32px;margin-bottom:2px">${label}${seasonPill(seasonLabel)}</h2>
-    <p style="color:#666;margin:0 0 8px">${formatDate(date)}</p>
-    <p style="font-weight:700;color:${statusColor};margin:0 0 12px">${statusText}</p>
-    <table style="width:100%;border-collapse:collapse;font-size:14px">${tableHeader}${rows}</table>`;
+  return `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:36px;margin-bottom:6px">
+    <tr>
+      <td style="font-family:Arial,Helvetica,sans-serif;font-size:26px;font-weight:800;color:#111;vertical-align:middle;padding-right:4px">${label}</td>
+      <td style="vertical-align:middle">${seasonPill(seasonLabel)}</td>
+    </tr>
+  </table>
+  <p style="color:#666;margin:0 0 8px;font-family:Arial,Helvetica,sans-serif">${formatDate(date)}</p>
+  <p style="font-weight:700;color:${statusColor};margin:0 0 12px;font-family:Arial,Helvetica,sans-serif">${statusText}</p>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">${tableHeader}${rows}</table>`;
 }
 
 reportRouter.post('/daily', async (_req: Request, res: Response) => {
@@ -94,7 +116,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       : `⚠️ ${totalUnassigned} unassigned — ${formatDate(today)}`;
 
     const html = `<div style="font-family:system-ui,sans-serif;max-width:620px;margin:0 auto;color:#111">
-      <p style="margin:0 0 24px"><a href="https://gts-flotastjori.onrender.com" style="display:inline-block;background:#111;color:#fff;font-size:14px;font-weight:600;padding:8px 18px;border-radius:6px;text-decoration:none">Go to full schedule →</a></p>
+      ${ctaButton}
       <h1 style="margin-bottom:0">Shift Report</h1>
       ${daySection('Today', today, todayShifts, scheduleLabel(todayShifts))}
       ${daySection('Tomorrow', tomorrow, tomorrowShifts, scheduleLabel(tomorrowShifts))}
