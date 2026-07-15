@@ -1,9 +1,6 @@
 import { Router, type Request, type Response } from 'express';
-import { createElement } from 'react';
-import { render } from '@react-email/render';
 import { listHydratedShifts } from '../services/shiftInstancesService';
 import { optionalEnv } from '../utils/env';
-import DailyReport from '../emails/DailyReport';
 
 export const reportRouter = Router();
 
@@ -17,6 +14,8 @@ function formatDate(iso: string): string {
   });
 }
 
+const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
+
 function scheduleLabel(shifts: any[]): string {
   const counts: Record<string, number> = {};
   for (const s of shifts) {
@@ -29,32 +28,81 @@ function scheduleLabel(shifts: any[]): string {
   return name.charAt(0).toUpperCase() + name.slice(1) + ' Schedule';
 }
 
+function seasonColor(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes('summer')) return '#c2410c';
+  if (l.includes('winter')) return '#1d4ed8';
+  return '#374151';
+}
+
+const tableHeader = `<tr style="background:#f5f5f5">
+  <th style="padding:8px 12px;text-align:left;font-size:13px">Route</th>
+  <th style="padding:8px 12px;text-align:left;font-size:13px">Type</th>
+  <th style="padding:8px 12px;text-align:left;font-size:13px">Time</th>
+  <th style="padding:8px 12px;text-align:left;font-size:13px">Driver</th>
+</tr>`;
+
+function shiftRow(s: any, ok: boolean): string {
+  const color = ok ? '#1a7f37' : '#b91c1c';
+  return `<tr>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;font-weight:600">${s.route}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:#555">${LABEL[s.shiftType] || s.shiftType}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:#555">${s.time || ''}</td>
+    <td style="padding:7px 12px;border-bottom:1px solid #eee;color:${color};font-weight:${ok ? '400' : '700'}">${ok ? (s.driverName || '—') : '⚠️ Unassigned'}</td>
+  </tr>`;
+}
+
+function daySection(label: string, date: string, shifts: any[], seasonLabel: string): string {
+  const unassigned = shifts.filter((s: any) => !s.driverId);
+  const allGood = unassigned.length === 0;
+  const statusColor = allGood ? '#1a7f37' : '#b91c1c';
+  const statusText = allGood
+    ? `✅ All ${shifts.length} shifts assigned`
+    : `⚠️ ${unassigned.length} unassigned out of ${shifts.length}`;
+  const rows = [...unassigned, ...shifts.filter((s: any) => s.driverId)].map((s) => shiftRow(s, !!s.driverId)).join('');
+  return `
+    <h2 style="margin:36px 0 2px;font-size:22px">
+      ${label} <span style="font-size:14px;font-weight:600;color:${seasonColor(seasonLabel)}">${seasonLabel}</span>
+    </h2>
+    <p style="color:#666;margin:0 0 6px;font-size:14px">${formatDate(date)}</p>
+    <p style="font-weight:700;color:${statusColor};margin:0 0 10px;font-size:14px">${statusText}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">${tableHeader}${rows}</table>`;
+}
+
 reportRouter.get('/preview', async (_req: Request, res: Response) => {
   try {
     const today    = todayIso();
     const tomorrow = tomorrowIso();
-    const html = await render(createElement(DailyReport, {
-      todayDate:      today,
-      tomorrowDate:   tomorrow,
-      todayShifts:    [
-        { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
-        { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
-        { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: null, driverName: null },
-      ],
-      tomorrowShifts: [
-        { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
-        { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
-      ],
-      todayLabel:     'Winter Schedule',
-      tomorrowLabel:  'Summer Schedule',
-    }));
+    const html     = buildHtml(today, tomorrow, [
+      { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
+      { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
+      { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: null, driverName: null },
+    ], [
+      { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
+      { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
+    ], 'Winter Schedule', 'Summer Schedule');
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).send(`<pre>Render error: ${msg}</pre>`);
+    res.status(500).send(`<pre>${err instanceof Error ? err.message : String(err)}</pre>`);
   }
 });
+
+function buildHtml(today: string, tomorrow: string, todayShifts: any[], tomorrowShifts: any[], todayLabel: string, tomorrowLabel: string): string {
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111">
+<div style="max-width:620px;margin:0 auto;padding:32px 24px">
+  <p style="margin:0 0 28px">
+    <a href="https://gts-flotastjori.onrender.com" style="color:#1d4ed8;font-size:14px;font-weight:600">See full schedule →</a>
+  </p>
+  <h1 style="margin:0 0 4px;font-size:28px">Shift Report</h1>
+  ${daySection('Today', today, todayShifts, todayLabel)}
+  ${daySection('Tomorrow', tomorrow, tomorrowShifts, tomorrowLabel)}
+  <p style="color:#aaa;font-size:12px;margin-top:36px">Fleet Scheduler — automated daily report</p>
+</div>
+</body></html>`;
+}
 
 reportRouter.post('/daily', async (_req: Request, res: Response) => {
   try {
@@ -87,14 +135,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       ? `✅ All shifts assigned — ${formatDate(today)}`
       : `⚠️ ${totalUnassigned} unassigned — ${formatDate(today)}`;
 
-    const html = await render(createElement(DailyReport, {
-      todayDate:      today,
-      tomorrowDate:   tomorrow,
-      todayShifts,
-      tomorrowShifts,
-      todayLabel:     scheduleLabel(todayShifts),
-      tomorrowLabel:  scheduleLabel(tomorrowShifts),
-    }));
+    const html = buildHtml(today, tomorrow, todayShifts, tomorrowShifts, scheduleLabel(todayShifts), scheduleLabel(tomorrowShifts));
 
     const mailRes = await fetch('https://api.mailersend.com/v1/email', {
       method: 'POST',
