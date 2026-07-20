@@ -468,7 +468,30 @@ export default function App() {
   );
 
 
-  // ...existing code...
+  // Auth gate — blocks all routes until signed in when backend requires auth
+  if (backendAuthEnabled && authStatus !== 'signed-in' && authStatus !== 'disabled') {
+    return (
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '360px', width: '100%' }}>
+          <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, letterSpacing: '0.08em', color: '#6b7280', textTransform: 'uppercase' }}>GTS</p>
+          <h1 style={{ margin: '0 0 8px', fontSize: '26px', fontWeight: 700, color: '#111' }}>Fleet Scheduler</h1>
+          <p style={{ margin: '0 0 32px', fontSize: '15px', color: '#6b7280' }}>Sign in with your GTS account to continue</p>
+          {authStatus === 'checking' ? (
+            <p style={{ color: '#9ca3af', fontSize: '14px' }}>Checking sign-in status…</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleSignIn().catch(() => {})}
+              style={{ display: 'inline-block', padding: '12px 32px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
+            >
+              Sign in with Microsoft
+            </button>
+          )}
+          {authError && <p style={{ marginTop: '16px', color: '#b91c1c', fontSize: '13px' }}>{authError}</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
