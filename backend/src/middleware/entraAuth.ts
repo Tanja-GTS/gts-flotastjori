@@ -83,12 +83,19 @@ export function entraAuth(): RequestHandler {
     `https://sts.windows.net/${tenantId}/`,
   ];
 
+  const reportSecret = readOptional('REPORT_SECRET');
+
   return async (req, res, next) => {
     try {
       // Allow unauthenticated health checks.
       if (req.path === '/health') return next();
       // Allow unauthenticated debug endpoints only when explicitly enabled.
       if (publicDebugEndpointsEnabled() && req.path.startsWith('/debug/')) return next();
+      // Allow cron-triggered report endpoints authenticated by REPORT_SECRET.
+      if (req.path === '/report/daily' || req.path === '/report/preview') {
+        const incoming = String(req.headers['x-report-secret'] || req.query['secret'] || '').trim();
+        if (!reportSecret || incoming === reportSecret) return next();
+      }
 
       const { jwks, jwtVerify } = await joseInit;
 
