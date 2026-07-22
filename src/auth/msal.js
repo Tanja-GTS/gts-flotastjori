@@ -24,7 +24,11 @@ export async function getMsalAccessToken({ apiScope }) {
   const scope = (apiScope || '').trim() || requiredEnv('VITE_ENTRA_API_SCOPE');
   const instance = await ensureMsalInitialized();
   const account = await getSignedInAccount();
-  if (!account) return '';
+  if (!account) {
+    // No cached session — send to sign-in
+    await startLogin({ apiScope: scope }).catch(() => {});
+    return '';
+  }
 
   try {
     const result = await instance.acquireTokenSilent({
@@ -32,8 +36,20 @@ export async function getMsalAccessToken({ apiScope }) {
       scopes: ['openid', 'profile', 'email', scope],
     });
     return result?.accessToken || '';
-  } catch {
-    // If the browser requires interaction, the UI should call startLogin().
+  } catch (e) {
+    // Silent renewal failed — redirect to Microsoft to re-authenticate
+    try {
+      const { InteractionRequiredAuthError } = await import('@azure/msal-browser');
+      if (e instanceof InteractionRequiredAuthError) {
+        await instance.acquireTokenRedirect({
+          account,
+          scopes: ['openid', 'profile', 'email', scope],
+        });
+        return ''; // navigation started, won't reach here
+      }
+    } catch {
+      // acquireTokenRedirect throws when navigation starts — expected
+    }
     return '';
   }
 }
