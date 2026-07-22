@@ -8,13 +8,7 @@ import PrintDay from './PrintDay';
 import Drivers from './Drivers';
 import { fetchBuses, fetchDrivers, fetchShifts, fetchWorkspaces, generateShifts } from './data/backendApi';
 import { useI18n } from './i18n';
-
-function isMsalConfiguredFromEnv() {
-  const tenantId = (import.meta.env?.VITE_ENTRA_TENANT_ID || '').trim();
-  const clientId = (import.meta.env?.VITE_ENTRA_CLIENT_ID || '').trim();
-  const apiScope = (import.meta.env?.VITE_ENTRA_API_SCOPE || '').trim();
-  return Boolean(tenantId && clientId && apiScope);
-}
+import { isMsalConfigured } from './auth/msal';
 
 const GENERATE_DURATIONS_KEY = 'fleetScheduler.generateDurationsMs';
 
@@ -103,7 +97,7 @@ function normalizeShift(apiShift) {
 export default function App() {
   const { t } = useI18n();
   // Enable authentication if MSAL is configured
-  const msalConfigured = isMsalConfiguredFromEnv();
+  const msalConfigured = isMsalConfigured();
   const [authStatus, setAuthStatus] = useState(msalConfigured ? 'checking' : 'disabled');
   const [authError, setAuthError] = useState('');
 

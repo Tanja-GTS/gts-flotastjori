@@ -123,9 +123,6 @@ export default function Timeline({
   const [assignError, setAssignError] = useState('');
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [viewDays, setViewDays] = useState(isMobileInit ? 1 : 7);
-  const [showNotes, setShowNotes] = useState(false);
-  const [isEditingNote, setIsEditingNote] = useState(false);
-  const [editedNote, setEditedNote] = useState('');
   const [addMode, setAddMode] = useState(false);
   const [newShift, setNewShift] = useState({
     route: '',
@@ -602,7 +599,6 @@ export default function Timeline({
   useEffect(() => {
     if (!isRecordMonth) return;
     setAddMode(false);
-    setIsEditingNote(false);
   }, [isRecordMonth]);
 
   const applyMonthYear = useCallback(() => {
@@ -1283,9 +1279,7 @@ export default function Timeline({
                           setEditedDriverId(getEditedDriverIdForShift(shift));
                           setAssignError('');
                           setAssignOnlyThisShift(false);
-                          setEditedNote(shift.note || '');
-                          setIsEditingNote(false);
-                          setShowNotes(false);
+
                           setSelectedShiftToken(shift.token);
                           setAddMode(false);
                         }}

@@ -448,19 +448,15 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
 export async function getShiftById(req: Request, res: Response) {
   try {
     const itemId = String(req.params.id || '').trim();
-    console.log('[getShiftById] Requested shift ID:', itemId);
     if (!itemId) {
-      console.error('[getShiftById] Missing :id');
       res.status(400).json({ ok: false, error: 'Missing :id' });
       return;
     }
 
     if (itemId.startsWith('week:')) {
       const anchorItemId = itemId.slice('week:'.length).trim();
-      console.log('[getShiftById] Week token, anchorItemId:', anchorItemId);
       const weekInfo = await getHydratedWeekShiftsForAnchor({ anchorItemId });
       if (!weekInfo || weekInfo.shifts.length === 0) {
-        console.error('[getShiftById] Week not found for anchorItemId:', anchorItemId);
         res.status(404).json({ ok: false, error: 'Week not found' });
         return;
       }
@@ -496,7 +492,6 @@ export async function getShiftById(req: Request, res: Response) {
         })),
       };
 
-      console.log('[getShiftById] Returning week shift:', shift);
       res.json({ ok: true, shift });
       return;
     }
@@ -504,12 +499,10 @@ export async function getShiftById(req: Request, res: Response) {
     // Confirm page doesn't need trips; keep it lean.
     const shift = await getHydratedShiftById(itemId, { includeTrips: false });
     if (!shift) {
-      console.error('[getShiftById] Shift not found for itemId:', itemId);
       res.status(404).json({ ok: false, error: 'Shift not found' });
       return;
     }
 
-    console.log('[getShiftById] Returning shift:', shift);
     res.json({ ok: true, shift });
   } catch (err) {
     console.error('[getShiftById] Error:', err);

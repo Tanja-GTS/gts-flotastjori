@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { listHydratedShifts } from '../services/shiftInstancesService';
+import { listHydratedShifts, type HydratedShiftDto } from '../services/shiftInstancesService';
 import { optionalEnv } from '../utils/env';
 
 export const reportRouter = Router();
@@ -16,7 +16,7 @@ function formatDate(iso: string): string {
 
 const LABEL: Record<string, string> = { morning: 'Morning', evening: 'Evening', single: 'Single' };
 
-function scheduleLabel(shifts: any[]): string {
+function scheduleLabel(shifts: HydratedShiftDto[]): string {
   const counts: Record<string, number> = {};
   for (const s of shifts) {
     const key = String(s.season || '').trim().toLowerCase();
@@ -42,7 +42,7 @@ const tableHeader = `<tr style="background:#f5f5f5">
   <th style="padding:8px 12px;text-align:left;font-size:13px">Driver</th>
 </tr>`;
 
-function shiftRow(s: any, ok: boolean): string {
+function shiftRow(s: HydratedShiftDto, ok: boolean): string {
   const color = ok ? '#1a7f37' : '#b91c1c';
   return `<tr>
     <td style="padding:7px 12px;border-bottom:1px solid #eee;font-weight:600">${s.route}</td>
@@ -52,14 +52,14 @@ function shiftRow(s: any, ok: boolean): string {
   </tr>`;
 }
 
-function daySection(label: string, date: string, shifts: any[], seasonLabel: string): string {
-  const unassigned = shifts.filter((s: any) => !s.driverId);
+function daySection(label: string, date: string, shifts: HydratedShiftDto[], seasonLabel: string): string {
+  const unassigned = shifts.filter((s) => !s.driverId);
   const allGood = unassigned.length === 0;
   const statusColor = allGood ? '#1a7f37' : '#b91c1c';
   const statusText = allGood
     ? `✅ All ${shifts.length} shifts assigned`
     : `⚠️ ${unassigned.length} unassigned out of ${shifts.length}`;
-  const rows = [...unassigned, ...shifts.filter((s: any) => s.driverId)].map((s) => shiftRow(s, !!s.driverId)).join('');
+  const rows = [...unassigned, ...shifts.filter((s) => s.driverId)].map((s) => shiftRow(s, !!s.driverId)).join('');
   return `
     <h2 style="margin:36px 0 2px;font-size:22px">
       ${label} <span style="font-size:14px;font-weight:600;color:${seasonColor(seasonLabel)}">${seasonLabel}</span>
@@ -76,11 +76,11 @@ reportRouter.get('/preview', async (_req: Request, res: Response) => {
     const html     = buildHtml(today, tomorrow, [
       { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
       { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
-      { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: null, driverName: null },
-    ], [
+      { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: undefined, driverName: undefined },
+    ] as HydratedShiftDto[], [
       { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
       { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
-    ], 'Winter Schedule', 'Summer Schedule');
+    ] as HydratedShiftDto[], 'Winter Schedule', 'Summer Schedule');
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
@@ -88,7 +88,7 @@ reportRouter.get('/preview', async (_req: Request, res: Response) => {
   }
 });
 
-function buildHtml(today: string, tomorrow: string, todayShifts: any[], tomorrowShifts: any[], todayLabel: string, tomorrowLabel: string): string {
+function buildHtml(today: string, tomorrow: string, todayShifts: HydratedShiftDto[], tomorrowShifts: HydratedShiftDto[], todayLabel: string, tomorrowLabel: string): string {
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111">
