@@ -104,7 +104,8 @@ export default function App() {
   // Detect backend auth mode (public vs Entra-protected) so the UI behavior stays consistent.
   // This prevents the common failure mode where VITE_ENTRA_* is set (so frontend expects login)
   // but the backend is actually public (or vice-versa), making shifts/generate appear broken.
-  const [backendAuthEnabled, setBackendAuthEnabled] = useState(false);
+  // null = health check not yet complete; true/false = confirmed from /health
+  const [backendAuthEnabled, setBackendAuthEnabled] = useState(null);
 
   const handleSignIn = useCallback(async () => {
     const apiScope = (import.meta.env?.VITE_ENTRA_API_SCOPE || '').trim();
@@ -131,7 +132,11 @@ export default function App() {
     };
   }, []);
 
-  const canCallApi = backendAuthEnabled ? authStatus === 'signed-in' : true;
+  const canCallApi = backendAuthEnabled === null
+    ? false  // hold all calls until /health confirms auth status
+    : backendAuthEnabled
+      ? authStatus === 'signed-in'
+      : true;
 
   const [shifts, setShifts] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
@@ -463,7 +468,7 @@ export default function App() {
 
 
   // Auth gate — blocks all routes until signed in when backend requires auth
-  if (backendAuthEnabled && authStatus !== 'signed-in' && authStatus !== 'disabled') {
+  if (msalConfigured && (backendAuthEnabled === null || backendAuthEnabled) && authStatus !== 'signed-in' && authStatus !== 'disabled') {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '24px' }}>
         <div style={{ textAlign: 'center', maxWidth: '360px', width: '100%' }}>
