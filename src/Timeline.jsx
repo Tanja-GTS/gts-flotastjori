@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip } from '@mantine/core';
+import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip, Menu } from '@mantine/core';
 import { IconAlertCircle, IconChevronDown, IconChevronUp, IconChevronLeft, IconChevronRight, IconPrinter, IconUser } from '@tabler/icons-react';
 import { addDays, format, parseISO } from 'date-fns';
 import './timeline.css';
@@ -827,24 +827,7 @@ export default function Timeline({
             </button>
           </div>
 
-          <div className="appHeader__spacer">
-            <button
-              className="appHeader__navLink"
-              type="button"
-              onClick={() => navigate('/drivers')}
-              aria-label={t('nav.drivers')}
-            >
-              {t('nav.drivers')}
-            </button>
-            <a
-              className="appHeader__navLink appHeader__navLink--secondary"
-              href="https://meowing-lark-f0c.notion.site/38f80c3e1d318020af0dd5af7928f1b5?v=38f80c3e1d3180398d6d000cf070b664"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Go to Notion
-            </a>
-          </div>
+          <div className="appHeader__spacer" />
 
           <div className="appHeader__right">
             <div className="appHeader__separator" aria-hidden="true" />
@@ -870,23 +853,41 @@ export default function Timeline({
               >
                 {langToggleLabel}
               </button>
-              {backendAuthEnabled && authStatus !== 'disabled' && (
-                <>
-                  <div className="appHeader__separator" aria-hidden="true" />
-                  <button
-                    className="appHeader__addShift"
-                    type="button"
-                    onClick={() => {
-                      const action = authStatus === 'signed-in' ? onSignOut : onSignIn;
-                      if (typeof action === 'function') action().catch(() => {});
-                    }}
-                    aria-label={authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
-                    title={authStatus === 'signed-in' ? '' : authError || t('common.signInHint')}
-                  >
-                    {authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
+              <div className="appHeader__separator" aria-hidden="true" />
+              <Menu shadow="sm" width={200} radius={0} position="bottom-end">
+                <Menu.Target>
+                  <button className="appHeader__menu" type="button" aria-label="Menu">
+                    Menu
                   </button>
-                </>
-              )}
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={() => navigate('/drivers')}>
+                    {t('nav.drivers')}
+                  </Menu.Item>
+                  <Menu.Item
+                    component="a"
+                    href="https://meowing-lark-f0c.notion.site/38f80c3e1d318020af0dd5af7928f1b5?v=38f80c3e1d3180398d6d000cf070b664"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Go to Notion
+                  </Menu.Item>
+                  {backendAuthEnabled && authStatus !== 'disabled' && (
+                    <>
+                      <Menu.Divider className="appHeader__menuDivider" />
+                      <Menu.Item
+                        onClick={() => {
+                          const action = authStatus === 'signed-in' ? onSignOut : onSignIn;
+                          if (typeof action === 'function') action().catch(() => {});
+                        }}
+                        title={authStatus === 'signed-in' ? '' : authError || t('common.signInHint')}
+                      >
+                        {authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
+                      </Menu.Item>
+                    </>
+                  )}
+                </Menu.Dropdown>
+              </Menu>
             </div>
           </div>
         </div>

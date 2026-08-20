@@ -99,43 +99,6 @@
   padding-right: 16px;
 }
 
-.appHeader__navLink {
-  height: 36px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #151922;
-  cursor: pointer;
-  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: normal;
-  text-decoration: underline;
-  transition: color 120ms ease;
-}
-
-.appHeader__navLink:hover {
-  color: #42454C;
-}
-
-.appHeader__navLink:focus-visible {
-  outline: 2px solid #2D6D5D;
-  outline-offset: 3px;
-}
-
-.appHeader__navLink--secondary {
-  color: #6B7280;
-  text-decoration: none;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  margin-left: 8px;
-}
-
-.appHeader__navLink--secondary:hover {
-  color: #374151;
-  border-color: #9CA3AF;
-}
-
 .appHeader__brand {
   display: flex;
   height: 57px;
@@ -393,6 +356,35 @@
 .appHeader__lang:focus-visible {
   outline: 2px solid #2D6D5D;
   outline-offset: 2px;
+}
+
+.appHeader__menu {
+  display: flex;
+  height: 36px;
+  padding: 8px 16px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1px solid #33363E;
+  background: #FFF;
+  color: #151922;
+  font-family: 'Neue Montreal', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 0;
+  cursor: pointer;
+}
+.appHeader__menu:hover {
+  background: #F5F7F9;
+}
+.appHeader__menu:focus-visible {
+  outline: 2px solid #2D6D5D;
+  outline-offset: 2px;
+}
+
+.appHeader__menuDivider {
+  border-top-color: #151922 !important;
+  margin: 4px 0;
 }
 
 /* --- END HEADER REDESIGN --- */
