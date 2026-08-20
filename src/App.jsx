@@ -114,6 +114,11 @@ export default function App() {
     await startLogin({ apiScope });
   }, []);
 
+  const handleSignOut = useCallback(async () => {
+    const { startLogout } = await import('./auth/msal');
+    await startLogout();
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     fetch('/health')
@@ -519,6 +524,7 @@ export default function App() {
               authError={authError}
               backendAuthEnabled={backendAuthEnabled}
               onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
             />
           }
         />

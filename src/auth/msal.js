@@ -65,6 +65,7 @@ function getDummyMsalInstance() {
     loginRedirect: async () => {},
     acquireTokenSilent: async () => ({ accessToken: '' }),
     acquireTokenRedirect: async () => {},
+    logoutRedirect: async () => {},
   };
 }
 
@@ -126,5 +127,11 @@ export async function startLogin({ apiScope }) {
   await instance.loginRedirect({
     scopes: ['openid', 'profile', 'email', scope],
   });
+}
+
+export async function startLogout() {
+  const instance = await ensureMsalInitialized();
+  const account = instance.getActiveAccount ? instance.getActiveAccount() : null;
+  await instance.logoutRedirect({ account });
 }
 

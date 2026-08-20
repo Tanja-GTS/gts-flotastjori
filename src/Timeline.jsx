@@ -86,6 +86,7 @@ export default function Timeline({
   authStatus = 'disabled',
   authError = '',
   onSignIn,
+  onSignOut,
 }) {
   const navigate = useNavigate();
   const { lang, setLang, t } = useI18n();
@@ -848,17 +849,6 @@ export default function Timeline({
           <div className="appHeader__right">
             <div className="appHeader__separator" aria-hidden="true" />
             <div className="appHeader__actions">
-              {backendAuthEnabled && authStatus !== 'signed-in' && typeof onSignIn === 'function' && (
-                <button
-                  className="appHeader__addShift"
-                  type="button"
-                  onClick={() => onSignIn().catch(() => {})}
-                  aria-label={t('common.signIn')}
-                  title={authError || t('common.signInHint')}
-                >
-                  {t('common.signIn')}
-                </button>
-              )}
               {!isRecordMonth && (
                 <button
                   className="appHeader__addShift"
@@ -880,6 +870,23 @@ export default function Timeline({
               >
                 {langToggleLabel}
               </button>
+              {backendAuthEnabled && authStatus !== 'disabled' && (
+                <>
+                  <div className="appHeader__separator" aria-hidden="true" />
+                  <button
+                    className="appHeader__addShift"
+                    type="button"
+                    onClick={() => {
+                      const action = authStatus === 'signed-in' ? onSignOut : onSignIn;
+                      if (typeof action === 'function') action().catch(() => {});
+                    }}
+                    aria-label={authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
+                    title={authStatus === 'signed-in' ? '' : authError || t('common.signInHint')}
+                  >
+                    {authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
