@@ -146,6 +146,8 @@ export default function Timeline({
   const [monthYearOpened, setMonthYearOpened] = useState(false);
   const [workspaceOpened, setWorkspaceOpened] = useState(false);
   const [viewOpened, setViewOpened] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileWorkspaceExpanded, setMobileWorkspaceExpanded] = useState(false);
 
   useEffect(() => {
     // Default workflow: selecting a shift applies to the whole week (same route + shift type).
@@ -562,6 +564,12 @@ export default function Timeline({
     onRangeChange({ start, end, viewDays });
   }, [currentWeekStart, viewDays, onRangeChange]);
 
+  // Mobile shows a single day, so the header arrows step one day at a time.
+  // Keep viewDays in sync when the viewport crosses the mobile breakpoint.
+  useEffect(() => {
+    setViewDays(isMobile ? 1 : 7);
+  }, [isMobile]);
+
   const monthOptions = useMemo(
     () =>
       Array.from({ length: 12 }).map((_, monthIndex) => ({
@@ -727,6 +735,29 @@ export default function Timeline({
 
       <header className="appHeader">
         <div className="appHeader__inner">
+          {/* Mobile only: workspace pill + menu button (Figma: App bar) */}
+          <div className="appHeader__mobileTop">
+            <span className="workspacePill">
+              {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
+            </span>
+            <button
+              type="button"
+              className="appHeader__burger"
+              aria-label={t('nav.menu')}
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M3.75 6.75H20.25M3.75 12H20.25M12 17.25H20.25"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+
           <div className="appHeader__left">
             <div className="appHeader__brand" aria-label="Fleet Scheduler">
               <img className="appHeader__logo" src="/logo.svg" alt="GTS" />
@@ -808,7 +839,7 @@ export default function Timeline({
               onClick={handlePrevious}
               aria-label="Previous day"
             >
-              <IconChevronLeft size={20} aria-hidden="true" />
+              <IconChevronLeft size={24} aria-hidden="true" />
             </button>
             <span className="mobileNav__date">
               <span className="mobileNav__dow">{weekdayShort(currentWeekStart)}</span>
@@ -823,7 +854,7 @@ export default function Timeline({
               onClick={handleNext}
               aria-label="Next day"
             >
-              <IconChevronRight size={20} aria-hidden="true" />
+              <IconChevronRight size={24} aria-hidden="true" />
             </button>
           </div>
 
@@ -893,8 +924,96 @@ export default function Timeline({
         </div>
       </header>
 
+      {/* Mobile only: slide-in menu opened from the header burger */}
+      {isMobile && (
+      <Drawer
+        className="mobileMenuDrawer"
+        opened={mobileMenuOpen}
+        onClose={() => {
+          setMobileMenuOpen(false);
+          setMobileWorkspaceExpanded(false);
+        }}
+        title={t('nav.menu')}
+        position="right"
+        size={288}
+        styles={{
+          header: { paddingLeft: 20, paddingRight: 20 },
+          body: { padding: 0 },
+        }}
+      >
+        <nav className="mobileMenu">
+          <button
+            type="button"
+            className="mobileMenu__item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              navigate('/drivers');
+            }}
+          >
+            {t('nav.drivers')}
+          </button>
 
+          <button
+            type="button"
+            className={`mobileMenu__item mobileMenu__item--toggle${mobileWorkspaceExpanded ? ' is-open' : ''}`}
+            aria-expanded={mobileWorkspaceExpanded}
+            onClick={() => setMobileWorkspaceExpanded((o) => !o)}
+          >
+            {t('nav.changeWorkspace')}
+            <svg
+              className="mobileMenu__chevron"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          {mobileWorkspaceExpanded && (
+            <div className="mobileMenu__sublist" role="menu" aria-label={t('common.workspace')}>
+              {workspaceOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`mobileMenu__subitem${opt.value === workspaceId ? ' is-selected' : ''}`}
+                  role="menuitemradio"
+                  aria-checked={opt.value === workspaceId}
+                  onClick={() => {
+                    setWorkspaceId(opt.value);
+                    setMobileWorkspaceExpanded(false);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
+          {backendAuthEnabled && authStatus !== 'disabled' && (
+            <button
+              type="button"
+              className="mobileMenu__item"
+              onClick={() => {
+                const action = authStatus === 'signed-in' ? onSignOut : onSignIn;
+                setMobileMenuOpen(false);
+                if (typeof action === 'function') action().catch(() => {});
+              }}
+            >
+              {authStatus === 'signed-in' ? t('common.signOut') : t('common.signIn')}
+            </button>
+          )}
+        </nav>
+      </Drawer>
+      )}
 
       {/* Controls row just above the timeline */}
       {loadError && (

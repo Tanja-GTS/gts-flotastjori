@@ -7,6 +7,8 @@ export const translations = {
     },
     nav: {
       drivers: 'Drivers',
+      menu: 'Menu',
+      changeWorkspace: 'Change workspace',
     },
     common: {
       workspace: 'Workspace',
@@ -214,6 +216,8 @@ export const translations = {
 
   nav: {
     drivers: 'Bílstjórar',
+    menu: 'Valmynd',
+    changeWorkspace: 'Skipta um vinnusvæði',
   },
 
   common: {
