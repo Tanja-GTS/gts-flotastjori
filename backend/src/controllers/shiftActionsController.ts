@@ -37,6 +37,23 @@ function asString(value: unknown): string {
   return String(value);
 }
 
+// The signed-in manager, from the verified Entra token (see entraAuth middleware).
+// Undefined when AUTH_ENABLED is off.
+function getRequestUser(res: Response): { name: string; email: string } | null {
+  const user = (res.locals as { user?: { name?: unknown; preferred_username?: unknown } }).user;
+  if (!user) return null;
+  const email = asString(user.preferred_username).trim();
+  const name = asString(user.name).trim();
+  if (!email && !name) return null;
+  return { name: name || email, email };
+}
+
+function assignedByHtml(user: { name: string; email: string } | null): string {
+  if (!user) return '';
+  const who = user.email ? `${user.name} (${user.email})` : user.name;
+  return `<p style="margin-top:14px;color:#495057">Assigned by <strong>${who}</strong>.</p>`;
+}
+
 function isoToUtcDate(isoDate: string): Date {
   return new Date(`${String(isoDate).slice(0, 10)}T00:00:00Z`);
 }
@@ -187,6 +204,7 @@ export async function postAssignAndEmail(req: Request, res: Response) {
 
     // If driverId is empty, null, or 'unassigned', treat as unassign
     const isUnassign = !driverId || driverId === 'unassigned';
+    const manager = getRequestUser(res);
 
     // Load shift details once (no trips needed for confirmation email).
     const shiftBefore = await getHydratedShiftById(itemId, { includeTrips: false });
@@ -255,6 +273,7 @@ export async function postAssignAndEmail(req: Request, res: Response) {
           </a>
         </p>
         <p style="margin-top:14px;color:#495057">If you want to decline the shift, call your fleet manager.</p>
+        ${assignedByHtml(manager)}
         <p style="margin-top:14px">If the button doesn't work, open this link:</p>
         <p><a href="${confirmUrl}">${confirmUrl}</a></p>
       </div>
@@ -263,7 +282,14 @@ export async function postAssignAndEmail(req: Request, res: Response) {
     // Only send email if assigning a driver
     if (!isUnassign && to) {
       try {
-        await sendConfirmationEmail({ to, subject, html, workspaceId: shiftBefore.workspaceId });
+        await sendConfirmationEmail({
+          to,
+          subject,
+          html,
+          workspaceId: shiftBefore.workspaceId,
+          replyToEmail: manager?.email || undefined,
+          replyToName: manager?.name || undefined,
+        });
       } catch (e) {
         mailOk = false;
         mailError = e instanceof Error ? e.message : String(e);
@@ -289,6 +315,7 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
     const anchorItemId = String(req.params.id || '').trim();
     const driverId = asString((req.body as any)?.driverId).trim();
     const isUnassign = !driverId || driverId === 'unassigned';
+    const manager = getRequestUser(res);
 
     if (!anchorItemId) {
       res.status(400).json({ ok: false, error: 'Required: :id' });
@@ -408,6 +435,7 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
           </a>
         </p>
         <p style="margin-top:14px;color:#495057">If you want to decline the shift, call your fleet manager.</p>
+        ${assignedByHtml(manager)}
         <p style="margin-top:14px">If the button doesn't work, open this link:</p>
         <p><a href="${confirmUrl}">${confirmUrl}</a></p>
       </div>
@@ -415,7 +443,14 @@ export async function postAssignWeekAndEmail(req: Request, res: Response) {
 
     if (to) {
       try {
-        await sendConfirmationEmail({ to, subject, html, workspaceId: weekInfo.anchor.workspaceId });
+        await sendConfirmationEmail({
+          to,
+          subject,
+          html,
+          workspaceId: weekInfo.anchor.workspaceId,
+          replyToEmail: manager?.email || undefined,
+          replyToName: manager?.name || undefined,
+        });
       } catch (e) {
         mailOk = false;
         mailError = e instanceof Error ? e.message : String(e);
