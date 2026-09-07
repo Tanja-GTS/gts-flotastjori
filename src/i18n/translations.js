@@ -58,6 +58,7 @@ export const translations = {
         shiftDetailsTitle: 'Shift details',
         addNewShiftTitle: 'Add new shift',
         manualShiftOutsidePatterns: 'Manual shift outside of patterns',
+        clockedInAt: 'clocked in at',
 
         route: 'Route',
         routeName: 'Route name',
@@ -276,6 +277,7 @@ export const translations = {
       shiftDetailsTitle: 'Upplýsingar um vakt',
       addNewShiftTitle: 'Bæta við nýrri vakt',
       manualShiftOutsidePatterns: 'Handvirk vakt utan sniðmáta',
+      clockedInAt: 'stimplaði sig inn kl.',
 
       route: 'Leið',
       routeName: 'Heiti leiðar',

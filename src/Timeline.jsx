@@ -1685,6 +1685,30 @@ export default function Timeline({
                 </div>
               ) : null}
 
+              {(() => {
+                const clock = selectedShift.date === todayISO ? clockByShiftId[selectedShift.token] : null;
+                if (!clock) return null;
+                const onShift = clock.status === 'on-shift';
+                return (
+                  <div
+                    style={{
+                      margin: '16px 0 0',
+                      padding: '10px 14px',
+                      background: onShift ? '#dcfce7' : 'var(--accent)',
+                      border: `1px solid ${onShift ? '#bbf7d0' : 'var(--border)'}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: onShift ? '#15803d' : 'var(--muted)',
+                    }}
+                  >
+                    {onShift
+                      ? `✓ ${t('timeline.clock.onShift')} — ${t('timeline.drawer.clockedInAt')} ${String(clock.clockInAt || '').slice(11, 16)}`
+                      : `${t('timeline.clock.done')} — ${String(clock.clockInAt || '').slice(11, 16)}–${String(clock.clockOutAt || '').slice(11, 16)}`}
+                  </div>
+                );
+              })()}
+
               <div
                 style={{
                   display: 'grid',
