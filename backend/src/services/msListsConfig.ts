@@ -48,6 +48,7 @@ export function getShiftInstanceExternalFieldNames() {
     externalArr: optionalEnv('LIST_FIELD_EXTERNAL_ARR', 'externalArr'),
     externalDep: optionalEnv('LIST_FIELD_EXTERNAL_DEP', 'externalDep'),
     lastSyncedAt: optionalEnv('LIST_FIELD_LAST_SYNCED_AT', 'lastSyncedAt'),
+    externalConflict: optionalEnv('LIST_FIELD_EXTERNAL_CONFLICT', 'externalConflict'),
   };
 }
 

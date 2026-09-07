@@ -1398,10 +1398,10 @@ export default function Timeline({
                         return (
                       <div
                         key={shift.token || `${shift.route}-${shift.day}-${shift.name}-${i}`}
-                        className="shift-card"
+                        className={`shift-card${shift.externalConflict ? ' shift-card--conflict' : ''}`}
                         role="button"
                         tabIndex={0}
-                        aria-label={`${shiftTypeLabel} shift${ariaTitle} from ${shift.time} for ${driverLabel}`}
+                        aria-label={`${shiftTypeLabel} shift${ariaTitle} from ${shift.time} for ${driverLabel}${shift.externalConflict ? ` — ${t('timeline.conflict.badge')}` : ''}`}
                         onClick={() => {
                           setEditedDriverId(getEditedDriverIdForShift(shift));
                           setAssignError('');
@@ -1430,6 +1430,12 @@ export default function Timeline({
                           </div>
                         )}
                         <div className="shift-time">{shift.time}</div>
+
+                        {shift.externalConflict && (
+                          <div className="shift-conflict" title={shift.externalConflict}>
+                            ⚠️ {t('timeline.conflict.badge')}
+                          </div>
+                        )}
 
                         <div className="shift-footer">
                           <div className="shift-driver">{driverText}</div>
@@ -1620,6 +1626,24 @@ export default function Timeline({
                   </div>
                 ) : null}
               </div>
+
+              {selectedShift.externalConflict ? (
+                <div
+                  role="alert"
+                  style={{
+                    margin: '16px 0 0',
+                    padding: '12px 14px',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    color: '#7f1d1d',
+                    fontWeight: 600,
+                  }}
+                >
+                  ⚠️ {selectedShift.externalConflict}
+                </div>
+              ) : null}
 
               <div
                 style={{

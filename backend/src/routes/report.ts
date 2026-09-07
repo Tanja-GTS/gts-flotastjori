@@ -69,6 +69,30 @@ function daySection(label: string, date: string, shifts: HydratedShiftDto[], sea
     <table style="width:100%;border-collapse:collapse;font-size:14px">${tableHeader}${rows}</table>`;
 }
 
+function conflictBlock(todayShifts: HydratedShiftDto[], tomorrowShifts: HydratedShiftDto[]): string {
+  const rows = [
+    ...todayShifts.map((s) => ({ when: 'Today', s })),
+    ...tomorrowShifts.map((s) => ({ when: 'Tomorrow', s })),
+  ].filter((r) => String((r.s as any).externalConflict || '').trim());
+
+  if (!rows.length) return '';
+
+  const items = rows
+    .map(
+      ({ when, s }) => `<li style="margin:4px 0">
+        <strong>${s.route}</strong> ${LABEL[s.shiftType] || s.shiftType} · ${when} · ${s.time || ''}
+        <br><span style="color:#7f1d1d">${(s as any).externalConflict}</span>
+      </li>`
+    )
+    .join('');
+
+  return `
+    <div style="margin:24px 0 0;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px">
+      <p style="margin:0 0 6px;font-weight:700;color:#b91c1c;font-size:14px">⚠️ Tímon conflicts — same shift assigned to 2+ drivers</p>
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:#111">${items}</ul>
+    </div>`;
+}
+
 reportRouter.get('/preview', async (_req: Request, res: Response) => {
   try {
     const today    = todayIso();
@@ -77,6 +101,8 @@ reportRouter.get('/preview', async (_req: Request, res: Response) => {
       { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
       { route: '51A', shiftType: 'evening', time: '14:30–23:00', driverId: 'y', driverName: 'Anna Björk' },
       { route: '51B', shiftType: 'morning', time: '06:30–15:00', driverId: undefined, driverName: undefined },
+      { route: '53', shiftType: 'morning', time: '05:55–12:05', driverId: 'z', driverName: 'Jiří Opálka',
+        externalConflict: '2 drivers assigned in Tímon: Jiří Opálka, Brynjar Freyr Jónsson' },
     ] as HydratedShiftDto[], [
       { route: '51A', shiftType: 'morning', time: '06:00–11:45', driverId: 'x', driverName: 'Jón Sigurðsson' },
       { route: '51B', shiftType: 'evening', time: '14:35–23:00', driverId: 'y', driverName: 'Anna Björk' },
@@ -97,6 +123,7 @@ function buildHtml(today: string, tomorrow: string, todayShifts: HydratedShiftDt
     <a href="https://gts-flotastjori.onrender.com" style="color:#1d4ed8;font-size:14px;font-weight:600">See full schedule →</a>
   </p>
   <h1 style="margin:0 0 4px;font-size:28px">Shift Report</h1>
+  ${conflictBlock(todayShifts, tomorrowShifts)}
   ${daySection('Today', today, todayShifts, todayLabel)}
   ${daySection('Tomorrow', tomorrow, tomorrowShifts, tomorrowLabel)}
   <p style="color:#aaa;font-size:12px;margin-top:36px">Fleet Scheduler — automated daily report</p>
@@ -130,10 +157,15 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
     const todayShifts    = shiftsFor(today);
     const tomorrowShifts = shiftsFor(tomorrow);
     const totalUnassigned = [...todayShifts, ...tomorrowShifts].filter((s: any) => !s.driverId).length;
+    const totalConflicts = [...todayShifts, ...tomorrowShifts]
+      .filter((s: any) => String(s.externalConflict || '').trim()).length;
 
-    const subject = totalUnassigned === 0
+    const subjectParts: string[] = [];
+    if (totalConflicts > 0) subjectParts.push(`${totalConflicts} Tímon conflict${totalConflicts === 1 ? '' : 's'}`);
+    if (totalUnassigned > 0) subjectParts.push(`${totalUnassigned} unassigned`);
+    const subject = subjectParts.length === 0
       ? `✅ All shifts assigned — ${formatDate(today)}`
-      : `⚠️ ${totalUnassigned} unassigned — ${formatDate(today)}`;
+      : `⚠️ ${subjectParts.join(', ')} — ${formatDate(today)}`;
 
     const html = buildHtml(today, tomorrow, todayShifts, tomorrowShifts, scheduleLabel(todayShifts), scheduleLabel(tomorrowShifts));
 

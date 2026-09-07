@@ -1355,6 +1355,33 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
   outline: none;
 }
 
+/* Tímon double-booking: same shift assigned to 2+ drivers */
+.shift-card--conflict {
+  border-color: #fca5a5;
+  box-shadow: inset 3px 0 0 #dc2626, var(--shift-card-shadow);
+}
+
+.shift-card--conflict:hover {
+  box-shadow: inset 3px 0 0 #dc2626, var(--shift-card-shadow-hover);
+}
+
+.shift-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .shift-name {
   font-weight: 750;
   font-size: 14px;

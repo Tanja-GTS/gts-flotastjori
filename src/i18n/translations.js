@@ -47,6 +47,9 @@ export const translations = {
       previousWeek: 'Previous week',
       nextWeek: 'Next week',
       goToCurrentWeek: 'Go to current week',
+      conflict: {
+        badge: 'Tímon conflict',
+      },
       drawer: {
         shiftDetailsTitle: 'Shift details',
         addNewShiftTitle: 'Add new shift',
@@ -258,6 +261,9 @@ export const translations = {
     previousWeek: 'Fyrri vika',
     nextWeek: 'Næsta vika',
     goToCurrentWeek: 'Fara í núverandi viku',
+    conflict: {
+      badge: 'Tímon árekstur',
+    },
     drawer: {
       shiftDetailsTitle: 'Upplýsingar um vakt',
       addNewShiftTitle: 'Bæta við nýrri vakt',

@@ -27,6 +27,7 @@ type TimonSyncModule = {
       unassignedCount: number;
       missingDriverCount: number;
       unmatchedCount: number;
+      conflictCount: number;
     };
     warnings: string[];
   }>;

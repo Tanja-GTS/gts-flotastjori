@@ -267,6 +267,42 @@ export async function previewTimonShiftMatching(params: {
   const matchedShifts = results.filter((item) => item.bestLocalMatch).length;
   const matchedDrivers = results.filter((item) => item.matchedDriver).length;
 
+  // Double-bookings: same shift (name + arr + dep) assigned to 2+ people in Tímon.
+  const assignedRowsByGroup = new Map<string, ExternalShiftPlan[]>();
+  for (const shift of externalShifts) {
+    if (shift.unassigned || !normalizeSsn(shift.ssn)) continue;
+    const key = [normalizeText(shift.name), String(shift.arr || '').trim(), String(shift.dep || '').trim()].join('|');
+    const bucket = assignedRowsByGroup.get(key);
+    if (bucket) bucket.push(shift);
+    else assignedRowsByGroup.set(key, [shift]);
+  }
+  const conflicts: Array<{
+    date: string;
+    shiftName: string;
+    time: string;
+    externalShiftIds: number[];
+    drivers: Array<{ ssn: string; name: string | null; matchedDriver: { id: string; name: string } | null }>;
+  }> = [];
+  for (const rows of assignedRowsByGroup.values()) {
+    const distinctBySsn = new Map<string, ExternalShiftPlan>();
+    for (const row of rows) distinctBySsn.set(normalizeSsn(row.ssn), row);
+    if (distinctBySsn.size < 2) continue;
+    const distinctRows = Array.from(distinctBySsn.values());
+    conflicts.push({
+      date: shiftIsoDate(distinctRows[0]),
+      shiftName: String(distinctRows[0].name || '').trim(),
+      time: buildExternalTimeLabel(distinctRows[0]),
+      externalShiftIds: distinctRows.map((row) => row.id),
+      drivers: distinctRows.map((row) => ({
+        ssn: normalizeSsn(row.ssn),
+        name: row.ssn_name || null,
+        matchedDriver: driversBySsn.get(normalizeSsn(row.ssn))
+          ? { id: driversBySsn.get(normalizeSsn(row.ssn))!.id, name: driversBySsn.get(normalizeSsn(row.ssn))!.name }
+          : null,
+      })),
+    });
+  }
+
   return {
     summary: {
       workspaceId,
@@ -276,7 +312,9 @@ export async function previewTimonShiftMatching(params: {
       unmatchedShiftCount: externalShifts.length - matchedShifts,
       matchedDriverCount: matchedDrivers,
       missingDriverCount: externalShifts.length - matchedDrivers,
+      conflictCount: conflicts.length,
     },
     results,
+    conflicts,
   };
 }

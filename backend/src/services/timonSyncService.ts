@@ -97,6 +97,12 @@ function shiftIsoDate(shift: ExternalShiftPlan): string {
   return asString(shift.arr).slice(0, 10);
 }
 
+// Tímon represents a double-booking as two separate shiftplan rows with different
+// `id` but identical name + arr + dep. Group assigned rows by that triple to detect it.
+function conflictGroupKey(shift: ExternalShiftPlan): string {
+  return [normalizeText(shift.name), asString(shift.arr).trim(), asString(shift.dep).trim()].join('|');
+}
+
 function shiftIsoMonth(shift: ExternalShiftPlan): string {
   return asString(shift.arr).slice(0, 7);
 }
@@ -136,6 +142,21 @@ function scoreCandidate(externalShift: ExternalShiftPlan, localShift: HydratedSh
   return score;
 }
 
+type TimonConflict = {
+  date: string;
+  shiftName: string;
+  time: string;
+  routeCode: string | null;
+  externalShiftIds: number[];
+  drivers: Array<{
+    ssn: string;
+    name: string | null;
+    matchedDriverId: string | null;
+    matchedDriverName: string | null;
+  }>;
+  matchedInstanceId?: string;
+};
+
 type TimonMatchResult = {
   externalShiftId: number;
   externalName: string;
@@ -171,8 +192,10 @@ export async function syncTimonShiftAssignments(params: {
     unassignedCount: number;
     missingDriverCount: number;
     unmatchedCount: number;
+    conflictCount: number;
   };
   results: TimonMatchResult[];
+  conflicts: TimonConflict[];
   warnings: string[];
 }> {
   const workspaceId = asString(params.workspaceId || 'south').trim() || 'south';
@@ -215,6 +238,47 @@ export async function syncTimonShiftAssignments(params: {
   const minScore = Math.max(1, Number(optionalEnv('TIMON_MIN_MATCH_SCORE', '55')) || 55);
   const minMargin = Math.max(0, Number(optionalEnv('TIMON_MIN_MATCH_MARGIN', '8')) || 8);
   const ext = getShiftInstanceExternalFieldNames();
+
+  // Detect double-bookings: the same shift (name + arr + dep) assigned to 2+ people in Tímon.
+  const assignedRowsByGroup = new Map<string, ExternalShiftPlan[]>();
+  for (const shift of externalShifts) {
+    if (shift.unassigned) continue;
+    if (!normalizeSsn(shift.ssn)) continue;
+    const key = conflictGroupKey(shift);
+    const bucket = assignedRowsByGroup.get(key);
+    if (bucket) bucket.push(shift);
+    else assignedRowsByGroup.set(key, [shift]);
+  }
+
+  const conflicts: TimonConflict[] = [];
+  const conflictLabelByGroup = new Map<string, string>();
+  for (const [key, rows] of assignedRowsByGroup) {
+    const distinctBySsn = new Map<string, ExternalShiftPlan>();
+    for (const row of rows) distinctBySsn.set(normalizeSsn(row.ssn), row);
+    if (distinctBySsn.size < 2) continue;
+
+    const distinctRows = Array.from(distinctBySsn.values());
+    const drivers = distinctRows.map((row) => {
+      const ssn = normalizeSsn(row.ssn);
+      const driver = driversBySsn.get(ssn);
+      return {
+        ssn,
+        name: asString(row.ssn_name).trim() || null,
+        matchedDriverId: driver?.id ?? null,
+        matchedDriverName: driver?.name ?? null,
+      };
+    });
+    const displayNames = drivers.map((d) => d.name || d.ssn).join(', ');
+    conflictLabelByGroup.set(key, `${distinctBySsn.size} drivers assigned in Tímon: ${displayNames}`);
+    conflicts.push({
+      date: shiftIsoDate(distinctRows[0]),
+      shiftName: asString(distinctRows[0].name).trim(),
+      time: buildExternalTimeLabel(distinctRows[0]),
+      routeCode: normalizeRouteCode(extractExternalRouteCode(distinctRows[0].name)) || null,
+      externalShiftIds: distinctRows.map((row) => Number(row.id)),
+      drivers,
+    });
+  }
 
   for (const externalShift of externalShifts) {
     const externalShiftId = asString(externalShift.id).trim();
@@ -277,6 +341,15 @@ export async function syncTimonShiftAssignments(params: {
     const matchedDriverId = matchedDriver?.id;
     const matchedDriverName = matchedDriver?.name;
 
+    // If this Tímon row belongs to a double-booked group, flag the matched
+    // instance; otherwise clear any stale flag left by a previous sync.
+    const conflictGroup = conflictGroupKey(externalShift);
+    const conflictLabel = conflictLabelByGroup.get(conflictGroup) ?? null;
+    if (conflictLabel) {
+      const conflict = conflicts.find((c) => c.externalShiftIds.includes(Number(externalShift.id)));
+      if (conflict && !conflict.matchedInstanceId) conflict.matchedInstanceId = matchedInstanceId;
+    }
+
     let action: TimonMatchResult['action'] = 'assigned';
     if (unassigned) action = 'unassigned';
     else if (!matchedDriverId) action = 'missing-driver';
@@ -307,6 +380,7 @@ export async function syncTimonShiftAssignments(params: {
         [ext.externalArr]: asString(externalShift.arr).trim() || null,
         [ext.externalDep]: asString(externalShift.dep).trim() || null,
         [ext.lastSyncedAt]: new Date().toISOString(),
+        [ext.externalConflict]: conflictLabel,
       };
 
       try {
@@ -349,6 +423,14 @@ export async function syncTimonShiftAssignments(params: {
     });
   }
 
+  for (const conflict of conflicts) {
+    const who = conflict.drivers.map((d) => d.name || d.ssn).join(' & ');
+    warnings.push(
+      `Tímon double-booking on ${conflict.date} ${conflict.shiftName} (${conflict.time}): ${who}` +
+        (conflict.matchedInstanceId ? ` — flagged shift ${conflict.matchedInstanceId}` : ' — no local shift matched')
+    );
+  }
+
   return {
     summary: {
       workspaceId,
@@ -359,8 +441,10 @@ export async function syncTimonShiftAssignments(params: {
       unassignedCount: results.filter((result) => result.action === 'unassigned').length,
       missingDriverCount: results.filter((result) => result.action === 'missing-driver').length,
       unmatchedCount: results.filter((result) => result.action === 'unmatched').length,
+      conflictCount: conflicts.length,
     },
     results,
+    conflicts,
     warnings,
   };
 }

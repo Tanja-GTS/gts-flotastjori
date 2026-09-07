@@ -35,6 +35,9 @@ export type ShiftInstanceDto = {
   externalArr?: string;
   externalDep?: string;
   lastSyncedAt?: string;
+  // Short human-readable warning written by the Tímon sync when the same shift
+  // is assigned to two or more people in Tímon. Empty/undefined = no conflict.
+  externalConflict?: string;
 };
 
 // Hydrated shift object the frontend can use immediately
@@ -70,6 +73,8 @@ export type HydratedShiftDto = {
   templateId?: string;
   busId?: string;
   trips?: TripDto[];
+  // Tímon double-assignment warning (see ShiftInstanceDto.externalConflict).
+  externalConflict?: string;
 };
 
 type DeleteGeneratedResult = { deleted: number };
@@ -569,6 +574,7 @@ export async function listShiftInstances(params: {
       fExt.externalArr,
       fExt.externalDep,
       fExt.lastSyncedAt,
+      fExt.externalConflict,
     ])
   ).join(',');
 
@@ -666,6 +672,7 @@ export async function listShiftInstances(params: {
         externalArr: asString(fields[fExt.externalArr]) || undefined,
         externalDep: asString(fields[fExt.externalDep]) || undefined,
         lastSyncedAt: asString(fields[fExt.lastSyncedAt]) || undefined,
+        externalConflict: asString(fields[fExt.externalConflict]) || undefined,
       };
       return dto;
     })
@@ -1259,6 +1266,7 @@ export async function listHydratedShifts(params: {
         season: pattern.season,
         effectiveFrom: pattern.effectiveFrom,
         effectiveTo: pattern.effectiveTo,
+        externalConflict: inst.externalConflict,
       };
 
       if (patternWorkspaceId) base.patternWorkspaceId = patternWorkspaceId;
@@ -1279,6 +1287,7 @@ export async function getHydratedShiftById(
   const graph = getGraphConfig();
   const lists = getListIds();
   const f = getShiftInstancesFieldNames();
+  const fExt = getShiftInstanceExternalFieldNames();
 
   const token = await getGraphAppToken(graph);
 
@@ -1309,6 +1318,7 @@ export async function getHydratedShiftById(
     notes: asString(fields[f.notes]) || undefined,
     generated: asBoolean(fields[f.generated]),
     manualOverride: asBoolean(fields[f.manualOverride]),
+    externalConflict: asString(fields[fExt.externalConflict]) || undefined,
   };
 
   if (!inst.workspaceId || !inst.date) return null;
@@ -1355,6 +1365,7 @@ export async function getHydratedShiftById(
     busId: inst.busId,
     defaultBus: inst.busId ? busTitles.get(inst.busId) || inst.busId : undefined,
     trips: includeTrips && inst.templateId ? tripsByTemplateId.get(inst.templateId) || [] : [],
+    externalConflict: inst.externalConflict,
   };
 }
 
@@ -1475,6 +1486,7 @@ export async function getHydratedWeekShiftsForAnchor(params: {
         templateId: inst.templateId,
         busId: inst.busId,
         defaultBus: inst.busId ? busTitles.get(inst.busId) || inst.busId : undefined,
+        externalConflict: inst.externalConflict,
       };
     })
     .filter(Boolean) as HydratedShiftDto[];
