@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express';
 import { getTimonReadiness, previewTimonShiftMatching } from '../services/timonPreviewService';
 import { syncTimonShiftAssignments } from '../services/timonSyncService';
+import { getShiftClockStatus } from '../services/timonClockStatusService';
 import type { ExternalShiftPlan } from '../services/timonService';
-import { cacheInvalidatePrefix } from '../services/simpleCache';
+import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
+
+const CLOCK_STATUS_TTL_MS = 45_000;
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -60,6 +63,21 @@ export async function postTimonPreview(req: Request, res: Response) {
     const params = readTimonBody(req);
     const preview = await previewTimonShiftMatching(params);
     res.json({ ok: true, preview });
+  } catch (err) {
+    sendApiError(res, err);
+  }
+}
+
+export async function getTimonClockStatus(req: Request, res: Response) {
+  try {
+    const workspaceId = asString(req.query.workspaceId) || 'south';
+    const date = asString(req.query.date) || new Date().toISOString().slice(0, 10);
+    const clockStatus = await cacheGetOrSet({
+      key: `timon-clock|${workspaceId}|${date}`,
+      ttlMs: CLOCK_STATUS_TTL_MS,
+      factory: () => getShiftClockStatus({ workspaceId, date }),
+    });
+    res.json({ ok: true, ...clockStatus });
   } catch (err) {
     sendApiError(res, err);
   }

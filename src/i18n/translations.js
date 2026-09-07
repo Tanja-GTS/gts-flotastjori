@@ -50,6 +50,10 @@ export const translations = {
       conflict: {
         badge: 'Tímon conflict',
       },
+      clock: {
+        onShift: 'On shift',
+        done: 'Done',
+      },
       drawer: {
         shiftDetailsTitle: 'Shift details',
         addNewShiftTitle: 'Add new shift',
@@ -263,6 +267,10 @@ export const translations = {
     goToCurrentWeek: 'Fara í núverandi viku',
     conflict: {
       badge: 'Tímon árekstur',
+    },
+    clock: {
+      onShift: 'Á vakt',
+      done: 'Búið',
     },
     drawer: {
       shiftDetailsTitle: 'Upplýsingar um vakt',

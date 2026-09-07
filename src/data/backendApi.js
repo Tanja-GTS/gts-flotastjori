@@ -110,6 +110,16 @@ export async function fetchShifts({ workspaceId, month }) {
   return data.shifts || [];
 }
 
+export async function fetchClockStatus({ workspaceId, date }) {
+  const base = getBaseUrl();
+  const qs = new URLSearchParams();
+  if (workspaceId) qs.set('workspaceId', workspaceId);
+  if (date) qs.set('date', date);
+
+  const data = await fetchJson(`${base}/api/timon/clock-status?${qs.toString()}`);
+  return data.byShiftId || {};
+}
+
 export async function generateShifts({ workspaceId, month }) {
   const base = getBaseUrl();
   const qs = new URLSearchParams();

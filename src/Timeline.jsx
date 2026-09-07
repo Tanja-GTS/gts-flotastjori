@@ -8,7 +8,7 @@ import './timeline.css';
 import { selectRoutesForWorkspace, selectVisibleShifts } from './domain/selectors';
 import { SHIFT_TYPES_ORDERED, SHIFT_TYPE_LABELS, isShiftType } from './domain/shiftTypes';
 import { getTripsForShift } from './domain/tripsTemplate';
-import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekOnly } from './data/backendApi';
+import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekOnly, fetchClockStatus } from './data/backendApi';
 import { notifications } from '@mantine/notifications';
 import { useI18n } from './i18n';
 
@@ -711,6 +711,32 @@ export default function Timeline({
 
   const todayISO = format(new Date(), 'yyyy-MM-dd');
 
+  // Live "on shift" / "done" clock-in status from Tímon, for today's shifts only.
+  const [clockByShiftId, setClockByShiftId] = useState({});
+  const todayInView = dayDates.some((d) => format(d, 'yyyy-MM-dd') === todayISO);
+  useEffect(() => {
+    if (!todayInView || !workspaceId) {
+      setClockByShiftId({});
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      fetchClockStatus({ workspaceId, date: todayISO })
+        .then((byShiftId) => {
+          if (!cancelled) setClockByShiftId(byShiftId || {});
+        })
+        .catch(() => {
+          /* transient — keep the last known status */
+        });
+    };
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [todayInView, workspaceId, todayISO]);
+
   const monthStartISO = format(
     new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), 1),
     'yyyy-MM-dd'
@@ -1394,6 +1420,7 @@ export default function Timeline({
                                   : '';
 
                         const driverText = shift.driver && shift.driver !== 'Unassigned' ? shift.driver : '';
+                        const clock = cellDate === todayISO ? clockByShiftId[shift.token] : null;
 
                         return (
                       <div
@@ -1436,6 +1463,19 @@ export default function Timeline({
                             ⚠️ {t('timeline.conflict.badge')}
                           </div>
                         )}
+
+                        {clock ? (
+                          <div
+                            className={`shift-clock shift-clock--${clock.status}`}
+                            title={clock.status === 'on-shift'
+                              ? `${t('timeline.clock.onShift')} · ${String(clock.clockInAt || '').slice(11, 16)}`
+                              : `${t('timeline.clock.done')} · ${String(clock.clockOutAt || '').slice(11, 16)}`}
+                          >
+                            {clock.status === 'on-shift'
+                              ? `✓ ${t('timeline.clock.onShift')}`
+                              : t('timeline.clock.done')}
+                          </div>
+                        ) : null}
 
                         <div className="shift-footer">
                           <div className="shift-driver">{driverText}</div>

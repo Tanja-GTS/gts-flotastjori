@@ -22,6 +22,20 @@ export type ExternalShiftPlan = {
   unassigned?: boolean;
 };
 
+// One row from /arrdeps/. Tímon returns both planned rows (arrdeptype "VK",
+// round times) and real clock-in punches (arrdeptype "TI", precise timestamps,
+// dep=null while the person is still clocked in).
+export type ExternalArrdep = {
+  id: number;
+  ssn?: string | null;
+  arr: string;
+  dep?: string | null;
+  arrdeptype?: string | null;
+  howregistered?: string | null;
+  closed?: boolean;
+  approved?: boolean;
+};
+
 export function getTimonConfig() {
   return {
     baseUrl: optionalEnv('TIMON_API_BASE_URL', 'https://gts.timon.is/api/v2').trim().replace(/\/$/, ''),
@@ -84,4 +98,28 @@ export async function fetchTimonShiftPlans(params: {
 
   const data = (await res.json()) as unknown;
   return Array.isArray(data) ? (data as ExternalShiftPlan[]) : [];
+}
+
+export async function fetchTimonArrdeps(params: {
+  fromdate: string;
+  todate: string;
+  ssn?: string;
+}): Promise<ExternalArrdep[]> {
+  const cfg = getTimonConfig();
+  const url = new URL(`${cfg.baseUrl}/arrdeps/`);
+  url.searchParams.set('fromdate', params.fromdate);
+  url.searchParams.set('todate', params.todate);
+  if (params.ssn) url.searchParams.set('ssn', params.ssn);
+
+  const res = await fetch(url.toString(), { method: 'GET', headers: timonAuthHeaders() });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new HttpError(res.status, `Tímon arrdeps request failed: ${res.status}`, {
+      code: 'timon_arrdeps_failed',
+      details: text,
+    });
+  }
+
+  const data = (await res.json()) as unknown;
+  return Array.isArray(data) ? (data as ExternalArrdep[]) : [];
 }
