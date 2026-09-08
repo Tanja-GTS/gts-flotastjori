@@ -172,26 +172,43 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
 
     const html = buildHtml(today, tomorrow, todayShifts, tomorrowShifts, scheduleLabel(todayShifts), scheduleLabel(tomorrowShifts));
 
-    const mailRes = await fetch('https://api.mailersend.com/v1/email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: { email: fromEmail, name: fromName },
-        to: recipients.map((email) => ({ email })),
-        subject,
-        html,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
+    // Send one request per recipient so a single rejected address (e.g. a
+    // MailerSend-unapproved recipient on a trial plan) doesn't block the rest.
+    const results = await Promise.all(
+      recipients.map(async (email) => {
+        try {
+          const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              from: { email: fromEmail, name: fromName },
+              to: [{ email }],
+              subject,
+              html,
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!mailRes.ok) {
+            const body = await mailRes.text();
+            return { email, ok: false, error: `MailerSend ${mailRes.status}: ${body}` };
+          }
+          return { email, ok: true };
+        } catch (e) {
+          return { email, ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      })
+    );
 
-    if (!mailRes.ok) {
-      const body = await mailRes.text();
-      res.status(500).json({ ok: false, reason: `MailerSend ${mailRes.status}: ${body}` });
+    const sent = results.filter((r) => r.ok).map((r) => r.email);
+    const failed = results.filter((r) => !r.ok);
+    for (const f of failed) console.error(`[report] send failed for ${f.email}: ${f.error}`);
+    console.log(`[report] Daily email sent to ${sent.join(', ') || '(none)'} — ${subject}`);
+
+    if (sent.length === 0) {
+      res.status(502).json({ ok: false, reason: 'All recipients failed', results });
       return;
     }
-
-    console.log(`[report] Daily email sent to ${recipients.join(', ')} — ${subject}`);
-    res.json({ ok: true, subject, recipients });
+    res.json({ ok: true, subject, sent, failed });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ ok: false, reason: msg });
