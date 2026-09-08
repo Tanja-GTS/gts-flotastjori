@@ -139,11 +139,14 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
     const fromName    = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
     const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
 
-    if (!apiKey || !to) {
+    // DAILY_REPORT_TO may be a comma/semicolon/space-separated list of addresses.
+    const recipients = to.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+
+    if (!apiKey || recipients.length === 0) {
       res.json({ ok: false, reason: 'MAILERLITE_API_KEY or DAILY_REPORT_TO not configured' });
       return;
     }
-    console.log(`[report] sending from=${fromEmail} to=${to} apiKeyPrefix=${apiKey.slice(0, 8)}`);
+    console.log(`[report] sending from=${fromEmail} to=${recipients.join(', ')} apiKeyPrefix=${apiKey.slice(0, 8)}`);
 
     const today    = todayIso();
     const tomorrow = tomorrowIso();
@@ -174,7 +177,7 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
         from: { email: fromEmail, name: fromName },
-        to: [{ email: to }],
+        to: recipients.map((email) => ({ email })),
         subject,
         html,
       }),
@@ -187,8 +190,8 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
       return;
     }
 
-    console.log(`[report] Daily email sent to ${to} — ${subject}`);
-    res.json({ ok: true, subject });
+    console.log(`[report] Daily email sent to ${recipients.join(', ')} — ${subject}`);
+    res.json({ ok: true, subject, recipients });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ ok: false, reason: msg });
