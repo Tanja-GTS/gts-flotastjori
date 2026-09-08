@@ -17,9 +17,13 @@ async function main() {
   });
   const body = await res.json() as any;
   if (!res.ok || body.ok === false) {
-    throw new Error(`Report failed: ${body.reason || res.status}`);
+    throw new Error(`Report failed: ${body.reason || res.status}${body.results ? ` — ${JSON.stringify(body.results)}` : ''}`);
   }
   console.log('[daily-report] Done:', body.subject);
+  if (Array.isArray(body.sent)) console.log('[daily-report] Sent to:', body.sent.join(', ') || '(none)');
+  if (Array.isArray(body.failed) && body.failed.length) {
+    for (const f of body.failed) console.error(`[daily-report] FAILED ${f.email}: ${f.error}`);
+  }
 }
 
 main().catch((err) => {
