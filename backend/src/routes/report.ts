@@ -131,22 +131,79 @@ function buildHtml(today: string, tomorrow: string, todayShifts: HydratedShiftDt
 </body></html>`;
 }
 
+async function sendViaBrevo(params: {
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': params.apiKey,
+      'Content-Type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { email: params.fromEmail, name: params.fromName },
+      to: [{ email: params.to }],
+      subject: params.subject,
+      htmlContent: params.html,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Brevo ${res.status}: ${body}`);
+  }
+}
+
+async function sendViaMailerSend(params: {
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
+  const res = await fetch('https://api.mailersend.com/v1/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${params.apiKey}` },
+    body: JSON.stringify({
+      from: { email: params.fromEmail, name: params.fromName },
+      to: [{ email: params.to }],
+      subject: params.subject,
+      html: params.html,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`MailerSend ${res.status}: ${body}`);
+  }
+}
+
 reportRouter.post('/daily', async (_req: Request, res: Response) => {
   try {
-    const apiKey      = optionalEnv('MAILERLITE_API_KEY', '');
-    const to          = optionalEnv('DAILY_REPORT_TO', '');
-    const fromEmail   = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
-    const fromName    = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
-    const workspaceId = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
+    const brevoKey     = optionalEnv('BREVO_API_KEY', '').trim();
+    const mailerSendKey = optionalEnv('MAILERLITE_API_KEY', '').trim();
+    const to           = optionalEnv('DAILY_REPORT_TO', '');
+    const fromEmail    = optionalEnv('DAILY_REPORT_FROM_EMAIL', 'noreply@gts.is');
+    const fromName     = optionalEnv('DAILY_REPORT_FROM_NAME', 'Fleet Scheduler');
+    const workspaceId  = optionalEnv('DAILY_REPORT_WORKSPACE', 'south');
+
+    const provider = brevoKey ? 'brevo' : mailerSendKey ? 'mailersend' : '';
 
     // DAILY_REPORT_TO may be a comma/semicolon/space-separated list of addresses.
     const recipients = to.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
 
-    if (!apiKey || recipients.length === 0) {
-      res.json({ ok: false, reason: 'MAILERLITE_API_KEY or DAILY_REPORT_TO not configured' });
+    if (!provider || recipients.length === 0) {
+      res.json({ ok: false, reason: 'DAILY_REPORT_TO not set, or no mail provider key (BREVO_API_KEY / MAILERLITE_API_KEY)' });
       return;
     }
-    console.log(`[report] sending from=${fromEmail} to=${recipients.join(', ')} apiKeyPrefix=${apiKey.slice(0, 8)}`);
+    console.log(`[report] sending via ${provider} from=${fromEmail} to=${recipients.join(', ')}`);
 
     const today    = todayIso();
     const tomorrow = tomorrowIso();
@@ -172,26 +229,13 @@ reportRouter.post('/daily', async (_req: Request, res: Response) => {
 
     const html = buildHtml(today, tomorrow, todayShifts, tomorrowShifts, scheduleLabel(todayShifts), scheduleLabel(tomorrowShifts));
 
-    // Send one request per recipient so a single rejected address (e.g. a
-    // MailerSend-unapproved recipient on a trial plan) doesn't block the rest.
+    // Send one message per recipient so one bad address doesn't block the rest.
     const results = await Promise.all(
       recipients.map(async (email) => {
         try {
-          const mailRes = await fetch('https://api.mailersend.com/v1/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              from: { email: fromEmail, name: fromName },
-              to: [{ email }],
-              subject,
-              html,
-            }),
-            signal: AbortSignal.timeout(15000),
-          });
-          if (!mailRes.ok) {
-            const body = await mailRes.text();
-            return { email, ok: false, error: `MailerSend ${mailRes.status}: ${body}` };
-          }
+          const args = { fromEmail, fromName, to: email, subject, html };
+          if (provider === 'brevo') await sendViaBrevo({ apiKey: brevoKey, ...args });
+          else await sendViaMailerSend({ apiKey: mailerSendKey, ...args });
           return { email, ok: true };
         } catch (e) {
           return { email, ok: false, error: e instanceof Error ? e.message : String(e) };
