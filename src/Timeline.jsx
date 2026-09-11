@@ -725,8 +725,11 @@ export default function Timeline({
         .then((byShiftId) => {
           if (!cancelled) setClockByShiftId(byShiftId || {});
         })
-        .catch(() => {
-          /* transient — keep the last known status */
+        .catch((err) => {
+          // Transient — keep the last known status, but don't fail silently.
+          // A missing/expired auth token (common on mobile browsers after the
+          // background session renewal quietly fails) shows up here as a 401.
+          console.error('[clock-status] fetch failed, keeping last known state:', err);
         });
     };
     load();
