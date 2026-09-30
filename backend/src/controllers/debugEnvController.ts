@@ -1,79 +1,60 @@
-import { Router } from 'express';
-import { optionalEnv } from '../utils/env';
-import { getShiftInstancesFieldNames, getShiftPatternsFieldNames, getGraphConfig } from '../services/msListsConfig';
-import { graphGet } from '../services/graphClient';
-
-const router = Router();
-
-// /api/debug/list-fields?list=<listName>&sample=1
-router.get('/list-fields', async (req, res) => {
-  // Allow in dev or if explicitly enabled
-  const allowDebug = process.env.ALLOW_DEBUG === '1' || process.env.NODE_ENV === 'development';
-  // If you have custom auth, check here
-  // if (!allowDebug && !req.auth) return res.status(401).json({ error: 'Unauthorized' });
-
-  const listName = String(req.query.list || '').trim();
-  if (!listName) {
-    return res.status(400).json({ ok: false, error: 'Missing ?list parameter' });
-  }
-  try {
-    const graph = getGraphConfig();
-    // Try to find the list by name
-    const listsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists?$top=999`;
-    const listsResp: any = await graphGet(listsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
-    const found = (listsResp.value || []).find((l: any) => (l.name || '').toLowerCase() === listName.toLowerCase() || (l.displayName || '').toLowerCase() === listName.toLowerCase());
-    if (!found) return res.status(404).json({ ok: false, error: `List not found: ${listName}` });
-    // Get columns
-    const columnsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists/${encodeURIComponent(found.id)}/columns?$top=999`;
-    const columnsResp: any = await graphGet(columnsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
-    let sample = null;
-    if (req.query.sample) {
-      const itemsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists/${encodeURIComponent(found.id)}/items?$expand=fields&$top=1`;
-      const itemsResp: any = await graphGet(itemsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
-      sample = itemsResp.value && itemsResp.value.length > 0 ? itemsResp.value[0] : null;
-    }
-    res.json({
-      ok: true,
-      list: listName,
-      listId: found.id,
-      columns: columnsResp.value || [],
-      sample,
-    });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, error: String(err && err.message || err) });
-  }
-});
-
-// Add a new generic debug endpoint for any list name
 import type { Request, Response } from 'express';
+import { getGraphConfig } from '../services/msListsConfig';
+import { getGraphAppToken } from '../services/graphAuth';
+import { graphGet } from '../services/graphClient';
+import { bearerFromHeader, publicDebugEndpointsEnabled } from '../middleware/entraAuth';
 
+// Inspect the columns of any list on the configured site, by display or internal name.
+//
+// A sample row is real list data, so it is only returned to an authenticated caller.
+// When PUBLIC_DEBUG_ENDPOINTS exposes this route anonymously, ?sample= is ignored and
+// only column metadata comes back. Mirrors the guard in getListFieldsDebug.
 export async function getEnvDebug(req: Request, res: Response) {
-  // Allow in dev or if explicitly enabled
-  const allowDebug = process.env.ALLOW_DEBUG === '1' || process.env.NODE_ENV === 'development';
-  // If you have custom auth, check here
-  // if (!allowDebug && !req.auth) return res.status(401).json({ error: 'Unauthorized' });
-
   const listName = String(req.query.list || '').trim();
   if (!listName) {
     return res.status(400).json({ ok: false, error: 'Missing ?list parameter' });
   }
+
+  let allowSample = Boolean(req.query.sample);
+  if (allowSample && publicDebugEndpointsEnabled() && !bearerFromHeader(req.headers.authorization)) {
+    allowSample = false;
+  }
+
   try {
     const graph = getGraphConfig();
-    // Try to find the list by name
-    const listsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists?$top=999`;
-    const listsResp: any = await graphGet(listsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
-    const found = (listsResp.value || []).find((l: any) => (l.name || '').toLowerCase() === listName.toLowerCase() || (l.displayName || '').toLowerCase() === listName.toLowerCase());
-    if (!found) return res.status(404).json({ ok: false, error: `List not found: ${listName}` });
-    // Get columns
-    const columnsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists/${encodeURIComponent(found.id)}/columns?$top=999`;
-    const columnsResp: any = await graphGet(columnsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
+    const token = await getGraphAppToken(graph);
+    const site = encodeURIComponent(graph.siteId);
+
+    const listsResp: any = await graphGet(
+      `https://graph.microsoft.com/v1.0/sites/${site}/lists?$top=999`,
+      token
+    );
+    const wanted = listName.toLowerCase();
+    const found = (listsResp.value || []).find(
+      (l: any) =>
+        String(l.name || '').toLowerCase() === wanted ||
+        String(l.displayName || '').toLowerCase() === wanted
+    );
+    if (!found) {
+      return res.status(404).json({ ok: false, error: `List not found: ${listName}` });
+    }
+
+    const listId = encodeURIComponent(found.id);
+    const columnsResp: any = await graphGet(
+      `https://graph.microsoft.com/v1.0/sites/${site}/lists/${listId}/columns?$top=999`,
+      token
+    );
+
     let sample = null;
-    if (req.query.sample) {
-      const itemsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(graph.siteId)}/lists/${encodeURIComponent(found.id)}/items?$expand=fields&$top=1`;
-      const itemsResp: any = await graphGet(itemsUrl, await import('../services/graphAuth.js').then(m => m.getGraphAppToken(graph)));
+    if (allowSample) {
+      const itemsResp: any = await graphGet(
+        `https://graph.microsoft.com/v1.0/sites/${site}/lists/${listId}/items?$expand=fields&$top=1`,
+        token
+      );
       sample = itemsResp.value && itemsResp.value.length > 0 ? itemsResp.value[0] : null;
     }
-    res.json({
+
+    return res.json({
       ok: true,
       list: listName,
       listId: found.id,
@@ -81,11 +62,6 @@ export async function getEnvDebug(req: Request, res: Response) {
       sample,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    return res.status(500).json({ ok: false, error: String((err && err.message) || err) });
   }
 }
-
-// Export a handler for the generic endpoint for use in the router
-
-
-export default router;
