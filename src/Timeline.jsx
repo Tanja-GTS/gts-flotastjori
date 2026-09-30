@@ -520,8 +520,6 @@ export default function Timeline({
     [selectedShiftToken, setShifts]
   );
 
-  const existingNote = selectedShift ? selectedShift.note || '' : '';
-
   const busLabelById = useMemo(
     () => new Map(busOptions.map((b) => [b.value, b.title])),
     [busOptions]
@@ -1446,9 +1444,6 @@ export default function Timeline({
                             setEditedDriverId(getEditedDriverIdForShift(shift));
                             setAssignError('');
                             setAssignOnlyThisShift(false);
-                            setEditedNote(shift.note || '');
-                            setIsEditingNote(false);
-                            setShowNotes(false);
                             setSelectedShiftToken(shift.token);
                             setAddMode(false);
                           }
