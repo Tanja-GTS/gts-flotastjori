@@ -126,6 +126,13 @@ services:
       - key: BREVO_API_KEY
         sync: false
 
+      # Shared secret authenticating the cron-triggered report call
+      # (x-report-secret header on POST /api/report/daily).
+      # Must match the value set on the daily-report cron service.
+      # If unset, the endpoint currently falls back to allowing anonymous calls.
+      - key: REPORT_SECRET
+        sync: false
+
       # Required: used to sign/verify email confirmation links (/confirm/:token)
       # IMPORTANT: keep it stable across deploys or previously sent links will break.
       - key: CONFIRM_LINK_SECRET
