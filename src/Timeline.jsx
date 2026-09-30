@@ -1795,10 +1795,12 @@ export default function Timeline({
               <hr style={{ margin: '16px 0' }} />
 
               {!isRecordMonth && (
-                <div style={{ marginBottom: 12 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 6px 0' }}>
-                    {t('timeline.drawer.assignDriverHeading')}
-                  </h3>
+                <Accordion chevronPosition="left" style={{ marginBottom: 12 }}>
+                  <Accordion.Item value="assign-driver">
+                    <Accordion.Control>
+                      <strong>{t('timeline.drawer.assignDriverHeading')}</strong>
+                    </Accordion.Control>
+                    <Accordion.Panel>
                   <p style={{ fontSize: 13, color: '#444', margin: '0 0 14px 0' }}>
                     {t('timeline.drawer.assignmentHelpLine1')}
                   </p>
@@ -1910,7 +1912,9 @@ export default function Timeline({
                       {assignError}
                     </div>
                   )}
-                </div>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                </Accordion>
               )}
 
               <hr style={{ margin: '16px 0' }} />
