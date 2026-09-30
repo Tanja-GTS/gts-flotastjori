@@ -5,6 +5,7 @@ dotenv.config({ path: path.resolve(process.cwd(), 'backend', '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const APP_URL = (process.env.APP_URL || 'https://gts-flotastjori.onrender.com').trim();
+const REPORT_SECRET = (process.env.REPORT_SECRET || '').trim();
 
 async function main() {
   console.log('[daily-report] Triggering report on web service...');
@@ -12,7 +13,12 @@ async function main() {
   // call and handles everything internally (SharePoint auth + email send).
   const res = await fetch(`${APP_URL}/api/report/daily`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Authenticates this cron-triggered call; the web service requires it
+      // once REPORT_SECRET is configured there.
+      ...(REPORT_SECRET ? { 'x-report-secret': REPORT_SECRET } : {}),
+    },
     signal: AbortSignal.timeout(300_000), // 5 minutes
   });
   const body = await res.json() as any;
