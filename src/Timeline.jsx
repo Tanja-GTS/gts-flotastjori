@@ -1795,15 +1795,7 @@ export default function Timeline({
               <hr style={{ margin: '16px 0' }} />
 
               {!isRecordMonth && (
-                <Accordion
-                  chevronPosition="right"
-                  styles={{
-                    item: { border: 'none', background: 'transparent' },
-                    control: { padding: 0 },
-                    label: { padding: 0 },
-                    content: { padding: 0 },
-                  }}
-                >
+                <Accordion className="assignAccordion" chevronPosition="right">
                   <Accordion.Item value="assign-driver">
                     <Accordion.Control>
                       <h4 style={{ margin: 0 }}>{t('timeline.drawer.assignDriverHeading')}</h4>
