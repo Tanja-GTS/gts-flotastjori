@@ -545,10 +545,13 @@ export default function Timeline({
     return new Date(d.setDate(diff));
   });
 
-  const viewedMonthStart = useMemo(
-    () => new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), 1),
-    [currentWeekStart]
-  );
+  // Judge "historical" by the LAST day on screen, not the first. A week that
+  // straddles a month boundary (e.g. Mon 29 Sep - Sun 5 Oct) still shows current
+  // days, so it must stay editable.
+  const viewedMonthStart = useMemo(() => {
+    const lastVisibleDay = addDays(currentWeekStart, Math.max(0, viewDays - 1));
+    return new Date(lastVisibleDay.getFullYear(), lastVisibleDay.getMonth(), 1);
+  }, [currentWeekStart, viewDays]);
   const currentMonthStart = useMemo(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
