@@ -1719,3 +1719,10 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
 .assignAccordion [class*='mantine-Accordion-panel'] {
   padding: 0;
 }
+
+/* Menu entries for features that are not ready to use yet. */
+.mobileMenu__item--disabled,
+.mobileMenu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

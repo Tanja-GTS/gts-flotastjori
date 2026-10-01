@@ -8,6 +8,7 @@ export const translations = {
     nav: {
       drivers: 'Drivers',
       timetables: 'Timetables',
+      timetablesInProgress: 'Timetables (in progress)',
       menu: 'Menu',
       changeWorkspace: 'Change workspace',
     },
@@ -243,6 +244,7 @@ export const translations = {
   nav: {
     drivers: 'Bílstjórar',
     timetables: 'Tímatöflur',
+    timetablesInProgress: 'Tímatöflur (í vinnslu)',
     menu: 'Valmynd',
     changeWorkspace: 'Skipta um vinnusvæði',
   },

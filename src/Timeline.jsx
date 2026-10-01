@@ -929,8 +929,9 @@ export default function Timeline({
                   <Menu.Item onClick={() => navigate('/drivers')}>
                     {t('nav.drivers')}
                   </Menu.Item>
-                  <Menu.Item onClick={() => navigate('/timetables')}>
-                    {t('nav.timetables')}
+                  {/* Disabled until the design lands; /timetables still opens directly. */}
+                  <Menu.Item disabled>
+                    {t('nav.timetablesInProgress')}
                   </Menu.Item>
                   <Menu.Item
                     component="a"
@@ -992,13 +993,10 @@ export default function Timeline({
 
           <button
             type="button"
-            className="mobileMenu__item"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              navigate('/timetables');
-            }}
+            className="mobileMenu__item mobileMenu__item--disabled"
+            disabled
           >
-            {t('nav.timetables')}
+            {t('nav.timetablesInProgress')}
           </button>
 
           <button
