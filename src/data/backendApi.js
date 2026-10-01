@@ -141,6 +141,16 @@ export async function fetchDrivers() {
   return data.drivers || [];
 }
 
+export async function createDriver({ name, email, phone, ssn }) {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/drivers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, phone, ssn }),
+  });
+  return data.driver;
+}
+
 export async function fetchWorkspaces() {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/workspaces`);

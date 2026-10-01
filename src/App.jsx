@@ -190,6 +190,21 @@ export default function App() {
 
   const [busOptions, setBusOptions] = useState([]);
   const [driverOptions, setDriverOptions] = useState([]);
+
+  // Shared by the initial load and by the Drivers page after adding someone.
+  const reloadDrivers = useCallback(async () => {
+    const drivers = await fetchDrivers();
+    const opts = (drivers || [])
+      .map((d) => ({
+        value: String(d.id),
+        label: d.name,
+        name: d.name,
+        email: d.email || '',
+        phone: d.phone || '',
+      }))
+      .filter((o) => o.value);
+    setDriverOptions(opts);
+  }, []);
   const [didBackfillDriverPhones, setDidBackfillDriverPhones] = useState(false);
 
   useEffect(() => {
@@ -295,27 +310,13 @@ export default function App() {
     if (!canCallApi) return () => {
       cancelled = true;
     };
-    fetchDrivers()
-      .then((drivers) => {
-        if (cancelled) return;
-        const opts = (drivers || [])
-          .map((d) => ({
-            value: String(d.id),
-            label: d.name,
-            name: d.name,
-            email: d.email || '',
-            phone: d.phone || '',
-          }))
-          .filter((o) => o.value);
-        setDriverOptions(opts);
-      })
-      .catch(() => {
-        setDriverOptions([]);
-      });
+    reloadDrivers().catch(() => {
+      if (!cancelled) setDriverOptions([]);
+    });
     return () => {
       cancelled = true;
     };
-  }, [canCallApi]);
+  }, [canCallApi, reloadDrivers]);
 
   // If the app was already open before we added driver phone support,
   // it may have cached driverOptions without `phone`. Refetch once to backfill.
@@ -528,7 +529,10 @@ export default function App() {
             />
           }
         />
-        <Route path="/drivers" element={<Drivers driverOptions={driverOptions} />} />
+        <Route
+          path="/drivers"
+          element={<Drivers driverOptions={driverOptions} onDriverAdded={reloadDrivers} />}
+        />
         <Route
           path="/confirm-shift"
           element={

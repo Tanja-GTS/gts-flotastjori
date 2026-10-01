@@ -162,6 +162,13 @@ export const translations = {
         phone: 'Phone',
         email: 'Email',
       },
+      add: {
+        title: 'Add a driver',
+        ssn: 'Kennitala',
+        ssnPlaceholder: '10 digits',
+        submit: 'Add driver',
+        saved: 'Driver added:',
+      },
     },
 
     date: {
@@ -383,6 +390,13 @@ export const translations = {
       name: 'Nafn',
       phone: 'Sími',
       email: 'Netfang',
+    },
+    add: {
+      title: 'Bæta við bílstjóra',
+      ssn: 'Kennitala',
+      ssnPlaceholder: '10 tölustafir',
+      submit: 'Bæta við bílstjóra',
+      saved: 'Bílstjóra bætt við:',
     },
   },
 

@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Table, Title } from '@mantine/core';
+import { Accordion, Button, Group, Table, TextInput, Title } from '@mantine/core';
 import { useI18n } from './i18n';
+import { createDriver } from './data/backendApi';
 import './drivers.css';
 
 function isUnassignedDriver(opt) {
@@ -12,8 +13,43 @@ function isUnassignedDriver(opt) {
   return /unassigned/i.test(name);
 }
 
-export default function Drivers({ driverOptions = [] }) {
+export default function Drivers({ driverOptions = [], onDriverAdded }) {
   const { t, locale } = useI18n();
+
+  const emptyForm = { name: '', phone: '', email: '', ssn: '' };
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [savedName, setSavedName] = useState('');
+
+  const setField = (key) => (e) => {
+    setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
+    setError('');
+    setSavedName('');
+  };
+
+  const canSave = String(form.name || '').trim().length > 0 && !saving;
+
+  async function handleAdd() {
+    setSaving(true);
+    setError('');
+    setSavedName('');
+    try {
+      const created = await createDriver({
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        ssn: form.ssn.trim(),
+      });
+      setForm(emptyForm);
+      setSavedName(created?.name || form.name.trim());
+      if (onDriverAdded) await onDriverAdded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const rows = useMemo(() => {
     const collator = new Intl.Collator(locale || undefined, { sensitivity: 'base', numeric: true });
@@ -40,6 +76,49 @@ export default function Drivers({ driverOptions = [] }) {
       <Title order={2} className="driversTitle">
         {t('drivers.title')}
       </Title>
+
+      <Accordion chevronPosition="right" className="driversAddAccordion">
+        <Accordion.Item value="add-driver">
+          <Accordion.Control>
+            <h4 style={{ margin: 0 }}>{t('drivers.add.title')}</h4>
+          </Accordion.Control>
+          <Accordion.Panel>
+            <div className="driversAddForm">
+              <TextInput
+                label={t('drivers.table.name')}
+                value={form.name}
+                onChange={setField('name')}
+                required
+              />
+              <TextInput label={t('drivers.table.phone')} value={form.phone} onChange={setField('phone')} />
+              <TextInput label={t('drivers.table.email')} value={form.email} onChange={setField('email')} />
+              <TextInput
+                label={t('drivers.add.ssn')}
+                value={form.ssn}
+                onChange={setField('ssn')}
+                placeholder={t('drivers.add.ssnPlaceholder')}
+              />
+            </div>
+
+            <Group mt="md">
+              <Button onClick={handleAdd} loading={saving} disabled={!canSave}>
+                {t('drivers.add.submit')}
+              </Button>
+            </Group>
+
+            {error && (
+              <div role="alert" style={{ marginTop: 10, fontSize: 13, color: '#b00020', fontWeight: 600 }}>
+                {error}
+              </div>
+            )}
+            {savedName && (
+              <div style={{ marginTop: 10, fontSize: 13, color: '#1a7f37', fontWeight: 600 }}>
+                {t('drivers.add.saved')} {savedName}
+              </div>
+            )}
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
 
       <div className="driversTableWrap">
         <Table striped highlightOnHover withTableBorder withColumnBorders>
