@@ -24,7 +24,10 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
   const [savedName, setSavedName] = useState('');
 
   const setField = (key) => (e) => {
-    setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
+    // Read the value synchronously: React clears currentTarget once the handler
+    // returns, and the updater below runs after that.
+    const value = e.target.value;
+    setForm((f) => ({ ...f, [key]: value }));
     setError('');
     setSavedName('');
   };
