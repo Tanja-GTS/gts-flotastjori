@@ -1,0 +1,211 @@
+.ttPage {
+  padding: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.ttBreadcrumbs {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.ttBreadcrumbs__link {
+  color: #1971c2;
+  text-decoration: none;
+}
+.ttBreadcrumbs__sep {
+  margin: 0 6px;
+}
+
+.ttTitle {
+  margin: 0 0 16px 0;
+}
+
+.ttSeason {
+  margin-bottom: 16px;
+}
+
+.ttBulk {
+  margin-bottom: 16px;
+}
+
+.ttEmpty {
+  color: #777;
+  font-size: 14px;
+}
+
+.ttCount {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #868e96;
+}
+
+.ttRouteGroup {
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f5;
+}
+.ttRouteGroup:last-child {
+  border-bottom: none;
+}
+.ttRouteGroup__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 8px 0 0 28px;
+}
+
+.ttPreview {
+  margin-top: 28px;
+}
+.ttPreview__title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #868e96;
+  margin: 0 0 12px 0;
+}
+
+/* ---- the printable sheet, modelled on the existing PDF ---- */
+
+.ttSheet {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.ttSheet__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  background: #06211a;
+  color: #fff;
+  padding: 18px 20px;
+}
+.ttSheet__days {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.ttSheet__name {
+  font-size: 15px;
+  margin-top: 4px;
+  opacity: 0.92;
+}
+.ttSheet__headRight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.ttSheet__type {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.ttSheet__route {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ttSheet__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ttSheet__table th,
+.ttSheet__table td {
+  text-align: left;
+  padding: 7px 14px;
+}
+.ttSheet__table thead th {
+  font-size: 12px;
+  color: #fff;
+  background: #06211a;
+  border-radius: 4px;
+}
+.ttSheet__table thead tr th:first-child {
+  background: transparent;
+}
+.ttSheet__table tbody th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ttSheet__table tbody td {
+  font-variant-numeric: tabular-nums;
+}
+.ttSheet__table tbody tr.is-break {
+  background: #eef7ee;
+}
+.ttSheet__table tbody tr.is-break th,
+.ttSheet__table tbody tr.is-break td {
+  font-weight: 600;
+  color: #2f6f3e;
+}
+
+.ttSheet__empty {
+  padding: 16px 20px;
+  color: #777;
+  font-size: 14px;
+}
+
+.ttSheet__foot {
+  padding: 10px 20px 16px;
+  font-size: 12px;
+  color: #868e96;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The print area is a staging block on screen; only it goes to the printer. */
+.ttPrintArea {
+  display: none;
+}
+
+@media print {
+  .ttBrowse {
+    display: none !important;
+  }
+  .ttPrintArea {
+    display: block;
+  }
+  .ttPage {
+    padding: 0;
+    max-width: none;
+  }
+  .ttSheet {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    page-break-after: always;
+    break-after: page;
+  }
+  .ttSheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .ttSheet__head {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .ttSheet__table thead th,
+  .ttSheet__table tbody tr.is-break {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+@media (max-width: 768px) {
+  .ttSheet__head {
+    flex-direction: column;
+  }
+  .ttSheet__table {
+    display: block;
+    overflow-x: auto;
+  }
+}

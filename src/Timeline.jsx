@@ -929,6 +929,9 @@ export default function Timeline({
                   <Menu.Item onClick={() => navigate('/drivers')}>
                     {t('nav.drivers')}
                   </Menu.Item>
+                  <Menu.Item onClick={() => navigate('/timetables')}>
+                    {t('nav.timetables')}
+                  </Menu.Item>
                   <Menu.Item
                     component="a"
                     href="https://meowing-lark-f0c.notion.site/38f80c3e1d318020af0dd5af7928f1b5?v=38f80c3e1d3180398d6d000cf070b664"
@@ -985,6 +988,17 @@ export default function Timeline({
             }}
           >
             {t('nav.drivers')}
+          </button>
+
+          <button
+            type="button"
+            className="mobileMenu__item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              navigate('/timetables');
+            }}
+          >
+            {t('nav.timetables')}
           </button>
 
           <button

@@ -7,6 +7,7 @@ export const translations = {
     },
     nav: {
       drivers: 'Drivers',
+      timetables: 'Timetables',
       menu: 'Menu',
       changeWorkspace: 'Change workspace',
     },
@@ -171,6 +172,16 @@ export const translations = {
       },
     },
 
+    timetables: {
+      title: 'Timetables',
+      selectAll: 'Select all',
+      print: 'Print',
+      preview: 'Preview',
+      empty: 'No timetables for this season yet. Open a month with shifts first.',
+      noTrips: 'This shift has no trips defined.',
+      stopRow: 'Stop',
+    },
+
     date: {
       weekdays: {
         mon: 'Monday',
@@ -231,6 +242,7 @@ export const translations = {
 
   nav: {
     drivers: 'Bílstjórar',
+    timetables: 'Tímatöflur',
     menu: 'Valmynd',
     changeWorkspace: 'Skipta um vinnusvæði',
   },
@@ -398,6 +410,16 @@ export const translations = {
       submit: 'Bæta við bílstjóra',
       saved: 'Bílstjóra bætt við:',
     },
+  },
+
+  timetables: {
+    title: 'Tímatöflur',
+    selectAll: 'Velja allt',
+    print: 'Prenta',
+    preview: 'Forskoðun',
+    empty: 'Engar tímatöflur fyrir þetta tímabil. Opnaðu mánuð með vöktum fyrst.',
+    noTrips: 'Engar ferðir skilgreindar fyrir þessa vakt.',
+    stopRow: 'Stopp',
   },
 
   date: {

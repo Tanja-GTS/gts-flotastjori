@@ -6,6 +6,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { WORKSPACES } from './workspaces';
 import PrintDay from './PrintDay';
 import Drivers from './Drivers';
+import Timetables from './Timetables';
 import { fetchBuses, fetchDrivers, fetchShifts, fetchWorkspaces, generateShifts } from './data/backendApi';
 import { useI18n } from './i18n';
 import { isMsalConfigured } from './auth/msal';
@@ -528,6 +529,10 @@ export default function App() {
               onSignOut={handleSignOut}
             />
           }
+        />
+        <Route
+          path="/timetables"
+          element={<Timetables shifts={shifts} workspaceId={workspaceId} />}
         />
         <Route
           path="/drivers"
