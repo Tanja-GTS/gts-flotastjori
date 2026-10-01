@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip, Menu } from '@mantine/core';
+import { Autocomplete, Button, Select, Checkbox, Accordion, TextInput, Drawer, Popover, Tooltip, Menu } from '@mantine/core';
 import { IconAlertCircle, IconChevronDown, IconChevronUp, IconChevronLeft, IconChevronRight, IconPrinter, IconUser } from '@tabler/icons-react';
 import { addDays, format, parseISO } from 'date-fns';
 import './timeline.css';
@@ -114,7 +114,6 @@ export default function Timeline({
     typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 
   const routes = selectRoutesForWorkspace(shifts, workspaceId);
-  const routeOptions = routes.map((route) => ({ value: route, label: route }));
   const [selectedShiftToken, setSelectedShiftToken] = useState(null);
   const [selectedRowKey, setSelectedRowKey] = useState(null);
   const [editedDriverId, setEditedDriverId] = useState(null);
@@ -133,6 +132,7 @@ export default function Timeline({
     startTime: '',
     endTime: '',
     defaultBus: '',
+    driverId: '',
   });
   const [formError, setFormError] = useState('');
   const [selectedDates, setSelectedDates] = useState([]);
@@ -655,6 +655,8 @@ export default function Timeline({
     }
 
     setFormError('');
+    const chosenDriver = newShift.driverId ? driverById.get(String(newShift.driverId)) : null;
+    const selectedNewDriverName = String(chosenDriver?.name || chosenDriver?.label || '').trim();
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dayName = dayNames[dateObj.getDay()];
     // Generate a unique token for the shift
@@ -669,7 +671,8 @@ export default function Timeline({
         date: newShift.date, // Store actual date for manual shifts
         name: newShift.name,
         time: `${newShift.startTime}–${newShift.endTime}`,
-        driver: 'Unassigned',
+        driver: selectedNewDriverName || 'Unassigned',
+        driverId: newShift.driverId || undefined,
         defaultBus: newShift.defaultBus,
         manual: true,
         token,
@@ -690,6 +693,7 @@ export default function Timeline({
       startTime: '',
       endTime: '',
       defaultBus: '',
+      driverId: '',
     });
   };
 
@@ -1541,18 +1545,21 @@ export default function Timeline({
               {t('timeline.drawer.manualShiftOutsidePatterns')}
             </p>
 
-            <Select
-              aria-label={t('timeline.drawer.route')}
-              data={routeOptions}
+            {/* Route is an Autocomplete, not a Select: a manual shift is by
+                definition outside the usual patterns, so it may need a route
+                that does not appear in the loaded data yet. */}
+            <Autocomplete
+              label={t('timeline.drawer.route')}
+              data={routes}
               value={newShift.route}
-              onChange={(value) => setNewShift(prev => ({ ...prev, route: value || '' }))}
+              onChange={(value) => setNewShift((prev) => ({ ...prev, route: value || '' }))}
               placeholder={t('timeline.drawer.route')}
               required
             />
 
             <Select
-              aria-label={t('timeline.drawer.shiftType')}
-              data={SHIFT_TYPES_ORDERED.map((t) => ({ value: t, label: SHIFT_TYPE_LABELS[t] }))}
+              label={t('timeline.drawer.shiftType')}
+              data={SHIFT_TYPES_ORDERED.map((type) => ({ value: type, label: SHIFT_TYPE_LABELS[type] }))}
               value={newShift.shiftType}
               onChange={(value) => setNewShift((prev) => ({ ...prev, shiftType: value || 'morning' }))}
               placeholder={t('timeline.drawer.shiftType')}
@@ -1560,7 +1567,7 @@ export default function Timeline({
             />
 
             <Select
-              aria-label={t('timeline.drawer.defaultBus')}
+              label={t('timeline.drawer.defaultBus')}
               data={busOptions}
               value={newShift.defaultBus}
               onChange={(value) =>
@@ -1570,9 +1577,17 @@ export default function Timeline({
               required
             />
 
+            <Select
+              label={t('timeline.drawer.driver')}
+              data={driverSelectOptions.length ? driverSelectOptions : fallbackDrivers}
+              value={newShift.driverId}
+              onChange={(value) => setNewShift((prev) => ({ ...prev, driverId: value || '' }))}
+              placeholder={t('common.unassigned')}
+              clearable
+            />
 
             <TextInput
-              aria-label={t('timeline.drawer.date')}
+              label={t('timeline.drawer.date')}
               type="date"
               value={newShift.date}
               onChange={(e) => setNewShift(prev => ({ ...prev, date: e.target.value }))}
@@ -1580,7 +1595,7 @@ export default function Timeline({
             />
 
             <TextInput
-              aria-label={t('timeline.drawer.shiftName')}
+              label={t('timeline.drawer.shiftName')}
               placeholder={t('timeline.drawer.shiftName')}
               value={newShift.name}
               onChange={(e) => setNewShift(prev => ({ ...prev, name: e.target.value }))}
@@ -1588,8 +1603,7 @@ export default function Timeline({
             />
 
             <TextInput
-              aria-label={t('timeline.drawer.startTime')}
-              placeholder={t('timeline.drawer.startTime')}
+              label={t('timeline.drawer.startTime')}
               type="time"
               value={newShift.startTime}
               onChange={(e) => setNewShift(prev => ({ ...prev, startTime: e.target.value }))}
@@ -1597,8 +1611,7 @@ export default function Timeline({
             />
 
             <TextInput
-              aria-label={t('timeline.drawer.endTime')}
-              placeholder={t('timeline.drawer.endTime')}
+              label={t('timeline.drawer.endTime')}
               type="time"
               value={newShift.endTime}
               onChange={(e) => setNewShift(prev => ({ ...prev, endTime: e.target.value }))}
