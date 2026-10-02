@@ -1496,3 +1496,127 @@ export async function getHydratedWeekShiftsForAnchor(params: {
 
   return { anchor, weekStart, weekEnd, shifts };
 }
+
+
+// ---------------------------------------------------------------------------
+// Stale-instance audit
+//
+// Generation only ever creates rows; nothing removes them when a pattern
+// changes. So a ShiftInstance can outlive the rule that produced it - a
+// Saturday row for a pattern that no longer runs Saturdays, say. Nothing in
+// the app re-checks that, so this reports the mismatches read-only.
+// ---------------------------------------------------------------------------
+
+export type StaleInstanceReason =
+  | 'day-of-week-mismatch'
+  | 'outside-effective-range'
+  | 'pattern-missing'
+  | 'workspace-mismatch';
+
+export type StaleInstance = {
+  id: string;
+  date: string;
+  weekday: string;
+  route?: string;
+  routeName?: string;
+  shiftType?: string;
+  patternId?: string;
+  patternDays?: string[];
+  reasons: StaleInstanceReason[];
+  // So a human can tell what is safe to delete.
+  hasDriver: boolean;
+  hasNotes: boolean;
+  confirmationStatus?: string;
+  manualOverride?: boolean;
+  safeToDelete: boolean;
+};
+
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function weekdayIndexOfIso(isoDate: string): number {
+  const d = new Date(`${String(isoDate).slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? -1 : d.getUTCDay();
+}
+
+export async function auditShiftInstances(params: {
+  workspaceId: string;
+  month: string;
+}): Promise<{
+  workspaceId: string;
+  month: string;
+  instanceCount: number;
+  staleCount: number;
+  safeToDeleteCount: number;
+  stale: StaleInstance[];
+}> {
+  const { workspaceId, month } = params;
+
+  const [instances, patterns] = await Promise.all([
+    listShiftInstances({ workspaceId, month }),
+    listShiftPatterns({ includeInvalid: true }),
+  ]);
+
+  const byId = new Map(patterns.map((p) => [p.id, p]));
+  const stale: StaleInstance[] = [];
+
+  for (const inst of instances) {
+    const reasons: StaleInstanceReason[] = [];
+    const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
+
+    if (!pattern) {
+      reasons.push('pattern-missing');
+    } else {
+      const dows = normalizeDows(pattern.dayOfWeek);
+      const idx = weekdayIndexOfIso(inst.date);
+      if (dows.length > 0 && idx >= 0 && !dows.includes(idx)) {
+        reasons.push('day-of-week-mismatch');
+      }
+
+      if (patternSeasonScore({ date: inst.date, effectiveFrom: pattern.effectiveFrom, effectiveTo: pattern.effectiveTo } as HydratedShiftDto) === 0) {
+        reasons.push('outside-effective-range');
+      }
+
+      const patternWs = normalizeWorkspaceSlug((pattern as any).workspaceId);
+      if (patternWs && !isGlobalWorkspaceSlug(patternWs) && patternWs !== inst.workspaceId) {
+        reasons.push('workspace-mismatch');
+      }
+    }
+
+    if (reasons.length === 0) continue;
+
+    const hasDriver = Boolean(inst.driverId);
+    const hasNotes = Boolean(inst.notes && String(inst.notes).trim());
+    const status = String(inst.confirmationStatus || '').trim().toLowerCase();
+    const acted = hasDriver || hasNotes || (status && status !== 'unassigned') || Boolean(inst.manualOverride);
+
+    const idx = weekdayIndexOfIso(inst.date);
+
+    stale.push({
+      id: inst.id,
+      date: inst.date,
+      weekday: idx >= 0 ? WEEKDAY_NAMES[idx] : '',
+      route: pattern?.route,
+      routeName: pattern?.routeName,
+      shiftType: pattern?.shiftType,
+      patternId: inst.patternId,
+      patternDays: pattern ? normalizeDows(pattern.dayOfWeek).map((n) => WEEKDAY_NAMES[n]) : undefined,
+      reasons,
+      hasDriver,
+      hasNotes,
+      confirmationStatus: inst.confirmationStatus,
+      manualOverride: inst.manualOverride,
+      safeToDelete: !acted,
+    });
+  }
+
+  stale.sort((a, b) => a.date.localeCompare(b.date) || String(a.route).localeCompare(String(b.route)));
+
+  return {
+    workspaceId,
+    month,
+    instanceCount: instances.length,
+    staleCount: stale.length,
+    safeToDeleteCount: stale.filter((s) => s.safeToDelete).length,
+    stale,
+  };
+}

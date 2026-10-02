@@ -9,6 +9,7 @@ import { getStopsTemplateBreakRows } from '../controllers/debugStopsTemplateBrea
 import { getEnvDebug } from '../controllers/debugEnvController';
 import { getShiftGenerationPreview } from '../controllers/debugGenerationController';
 import { getSearchPatterns } from '../controllers/debugPatternsSearchController';
+import { getStaleInstances } from '../controllers/debugStaleController';
 
 export const debugRouter = Router();
 
@@ -62,3 +63,8 @@ debugRouter.get('/shift-generation-preview', getShiftGenerationPreview);
 
 // Add the new debugEnvController endpoint to the debug router
 debugRouter.get('/list-fields-any', getEnvDebug);
+
+// Report ShiftInstances that no longer match their pattern (wrong weekday,
+// outside the effective range, orphaned, or wrong workspace). Read-only.
+//   GET /api/debug/stale-instances?workspaceId=south&month=2026-10
+debugRouter.get('/stale-instances', getStaleInstances);
