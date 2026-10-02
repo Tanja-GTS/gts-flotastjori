@@ -56,6 +56,10 @@ export type HydratedShiftDto = {
   shiftType: string;
   // Optional label from the pattern (ex: "weekdays" / "weekend")
   weekPart?: string;
+  // Weekdays the pattern actually runs (0=Sun..6=Sat), as stored on the pattern.
+  // Carried through so the read path can tell an instance that still matches its
+  // rule from one that outlived it.
+  patternDays?: number[];
   season?: string;
   effectiveFrom?: string;
   effectiveTo?: string;
@@ -116,6 +120,24 @@ function patternSeasonScore(shift: HydratedShiftDto): number {
     if (instDate > to) return 0;
   }
   return 2;
+}
+
+// An instance whose weekday is no longer among its pattern's days outlived the
+// rule that created it: the pattern used to run Saturdays, someone took Saturday
+// off it, and generation never removed the rows it had already written. The
+// season filter below already drops that same class of row for
+// effectiveFrom/effectiveTo, so a weekday mismatch is treated the same way.
+function instanceMatchesPatternWeekday(shift: HydratedShiftDto): boolean {
+  const days = shift.patternDays;
+  // Unknown or unparseable pattern days: never hide a shift on a guess.
+  if (!days || days.length === 0) return true;
+  const idx = weekdayIndexOfIso(shift.date);
+  if (idx < 0) return true;
+  if (days.includes(idx)) return true;
+  // A manual override is a shift someone deliberately put on that day, so it is
+  // a real shift and stays. Everything else on a day its pattern does not run
+  // is a leftover row and is not shown.
+  return Boolean(shift.manualOverride);
 }
 
 function dedupeHydratedShifts(shifts: HydratedShiftDto[]): HydratedShiftDto[] {
@@ -1248,6 +1270,7 @@ export async function listHydratedShifts(params: {
         timonShiftName: (pattern as any).timonShiftName,
         shiftType: pattern.shiftType,
         weekPart: (pattern as any).weekPart,
+        patternDays: normalizeDows(pattern.dayOfWeek),
         name: String(pattern.routeName || pattern.route || pattern.shiftType || ''),
         time: buildTimeLabel(pattern.startTime, pattern.endTime),
         driverId: inst.driverId,
@@ -1276,7 +1299,7 @@ export async function listHydratedShifts(params: {
 
   // When not filtering by workspace, we may have duplicates across workspaces due to bad data
   // (ex: cloned instances with mismatched workspaceId). De-dupe using the effective workspace.
-  return dedupeHydratedShifts(hydrated);
+  return dedupeHydratedShifts(hydrated.filter(instanceMatchesPatternWeekday));
 }
 
 export async function getHydratedShiftById(
@@ -1460,7 +1483,7 @@ export async function getHydratedWeekShiftsForAnchor(params: {
   const driversById = await resolveDrivers({ driverIds });
 
   const shifts: HydratedShiftDto[] = sameGroup
-    .map((inst) => {
+    .map((inst): HydratedShiftDto | null => {
       const pattern = inst.patternId ? byId.get(inst.patternId) : undefined;
       if (!pattern) return null;
       return {
@@ -1473,6 +1496,7 @@ export async function getHydratedWeekShiftsForAnchor(params: {
         timonShiftName: (pattern as any).timonShiftName,
         shiftType: pattern.shiftType,
         weekPart: (pattern as any).weekPart,
+        patternDays: normalizeDows(pattern.dayOfWeek),
         name: String(pattern.routeName || pattern.route || pattern.shiftType || ''),
         time: buildTimeLabel(pattern.startTime, pattern.endTime),
         driverId: inst.driverId,
@@ -1489,7 +1513,8 @@ export async function getHydratedWeekShiftsForAnchor(params: {
         externalConflict: inst.externalConflict,
       };
     })
-    .filter(Boolean) as HydratedShiftDto[];
+    .filter((v): v is HydratedShiftDto => Boolean(v))
+    .filter(instanceMatchesPatternWeekday);
 
   // Sort by date for nicer email output.
   shifts.sort((a, b) => a.date.localeCompare(b.date));
