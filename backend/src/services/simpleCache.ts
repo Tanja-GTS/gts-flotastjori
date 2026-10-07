@@ -66,8 +66,13 @@ export async function cacheGetOrSet<T>(params: {
   key: string;
   ttlMs: number;
   factory: () => Promise<T>;
+  // false = plain TTL cache: no background refresh, and an expired entry is
+  // refetched rather than served stale. For live data where a stale answer is
+  // wrong (and a failing fetch must surface as an error, not hide behind it).
+  staleWhileRevalidate?: boolean;
 }): Promise<T> {
   const { key, ttlMs, factory } = params;
+  const swr = params.staleWhileRevalidate !== false;
   const existing = store.get(key) as CacheEntry<T> | undefined;
   const t = nowMs();
 
@@ -75,6 +80,12 @@ export async function cacheGetOrSet<T>(params: {
     if (existing.expiresAt > t) {
       // Fresh — return immediately (awaits if still a pending Promise).
       return await (existing.value as Promise<T>);
+    }
+
+    if (!swr) {
+      if (existing.value instanceof Promise) return await (existing.value as Promise<T>);
+      store.delete(key);
+      return cacheGetOrSet(params);
     }
 
     // Stale but has resolved data — return it immediately and refresh in background.
@@ -112,7 +123,7 @@ export async function cacheGetOrSet<T>(params: {
     const value = await pending;
     const resolved: CacheEntry<T> = { value, expiresAt: nowMs() + Math.max(0, ttlMs) };
     store.set(key, resolved as CacheEntry<unknown>);
-    scheduleRefresh(key, ttlMs, factory);
+    if (swr) scheduleRefresh(key, ttlMs, factory);
     return value;
   } catch (err) {
     if (store.get(key) === (pendingEntry as unknown)) store.delete(key);

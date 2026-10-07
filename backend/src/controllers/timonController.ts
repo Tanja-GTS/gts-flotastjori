@@ -76,6 +76,9 @@ export async function getTimonClockStatus(req: Request, res: Response) {
       key: `timon-clock|${workspaceId}|${date}`,
       ttlMs: CLOCK_STATUS_TTL_MS,
       factory: () => getShiftClockStatus({ workspaceId, date }),
+      // Live data: never serve an old answer. With background refresh, a Tímon
+      // outage kept returning the last (often empty, pre-clock-in) result all day.
+      staleWhileRevalidate: false,
     });
     res.json({ ok: true, ...clockStatus });
   } catch (err) {
