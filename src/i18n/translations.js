@@ -64,7 +64,7 @@ export const translations = {
           hasntClockedOut: '{name} hasn’t clocked out.',
           since: 'since {when}',
           checkTimon: 'Check Tímon',
-          empty: 'Everyone has clocked out',
+          empty: 'No new notifications',
         },
       },
       drawer: {
@@ -313,7 +313,7 @@ export const translations = {
         hasntClockedOut: '{name} hefur ekki stimplað sig út.',
         since: 'síðan {when}',
         checkTimon: 'Athugaðu Tímon',
-        empty: 'Allir hafa stimplað sig út',
+        empty: 'Engar nýjar tilkynningar',
       },
     },
     drawer: {
