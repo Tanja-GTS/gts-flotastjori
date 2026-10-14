@@ -1382,7 +1382,7 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
   text-overflow: ellipsis;
 }
 
-/* Tímon clock-in status (today only) */
+/* Tímon clock-in status (every visible day up to today) */
 .shift-clock {
   display: inline-flex;
   align-items: center;
@@ -1403,6 +1403,103 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
 
 .shift-clock--done {
   background: var(--accent);
+  color: var(--muted);
+}
+
+/* Never clocked out of an earlier day */
+.shift-clock--still-on-clock {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ===== Clock-in alerts bell (header) ===== */
+.clockBell {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #151922;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.clockBell:hover,
+.clockBell.is-open {
+  background: #f4f5f7;
+}
+
+.clockBell:focus-visible {
+  outline: 2px solid #151922;
+  outline-offset: -2px;
+}
+
+.clockBell__dot {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f5c842;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.clockBell.is-open .clockBell__dot,
+.clockBell:hover .clockBell__dot {
+  box-shadow: 0 0 0 2px #f4f5f7;
+}
+
+.clockBell__panel {
+  padding: 0 !important;
+  background: #f4f5f7 !important;
+  border: none !important;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.clockBell__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+.clockBell__item {
+  padding: 16px 24px;
+}
+
+.clockBell__item + .clockBell__item {
+  border-top: 1px solid #6b7280;
+}
+
+.clockBell__text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #151922;
+  line-height: 1.35;
+}
+
+.clockBell__since {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.clockBell__action {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #151922;
+}
+
+.clockBell__empty {
+  padding: 16px 24px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -1575,13 +1672,32 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
     display: none;
   }
 
-  /* Row 1: workspace pill + burger */
+  /* Row 1: bell + workspace pill on the left, burger on the right */
   .appHeader__mobileTop {
     display: flex;
     align-items: center;
     justify-content: space-between;
     height: 56px;
     padding: 0 16px;
+  }
+
+  .appHeader__mobileTopLeft {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .clockBell--mobile {
+    width: 44px;
+    height: 44px;
+    margin-left: -10px;
+    border-radius: 4px;
+  }
+
+  .clockBell--mobile .clockBell__dot {
+    top: 9px;
+    right: 9px;
   }
 
   .workspacePill {

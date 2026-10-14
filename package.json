@@ -8,6 +8,7 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "node node_modules/vite/bin/vite.js",
+    "dev:sample": "VITE_SAMPLE_DATA=true node node_modules/vite/bin/vite.js --port 5180",
     "dev": "concurrently -n backend,frontend -c blue,green --kill-others-on-fail \"npm run backend:dev\" \"npm run dev:frontend\"",
     "dev:all": "npm run dev",
     "dev:reset": "kill-port 4000 5174 || true && npm run dev",

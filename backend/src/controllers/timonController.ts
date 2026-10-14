@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { getTimonReadiness, previewTimonShiftMatching } from '../services/timonPreviewService';
 import { syncTimonShiftAssignments } from '../services/timonSyncService';
-import { getShiftClockStatus } from '../services/timonClockStatusService';
+import { getOpenPunchAlerts, getShiftClockStatus } from '../services/timonClockStatusService';
 import type { ExternalShiftPlan } from '../services/timonService';
 import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
@@ -71,16 +71,33 @@ export async function postTimonPreview(req: Request, res: Response) {
 export async function getTimonClockStatus(req: Request, res: Response) {
   try {
     const workspaceId = asString(req.query.workspaceId) || 'south';
-    const date = asString(req.query.date) || new Date().toISOString().slice(0, 10);
+    // `date` is the original single-day form; `from`/`to` cover the visible week.
+    const date = asString(req.query.date);
+    const from = asString(req.query.from) || date || new Date().toISOString().slice(0, 10);
+    const to = asString(req.query.to) || date || from;
     const clockStatus = await cacheGetOrSet({
-      key: `timon-clock|${workspaceId}|${date}`,
+      key: `timon-clock|${workspaceId}|${from}|${to}`,
       ttlMs: CLOCK_STATUS_TTL_MS,
-      factory: () => getShiftClockStatus({ workspaceId, date }),
+      factory: () => getShiftClockStatus({ workspaceId, from, to }),
       // Live data: never serve an old answer. With background refresh, a Tímon
       // outage kept returning the last (often empty, pre-clock-in) result all day.
       staleWhileRevalidate: false,
     });
     res.json({ ok: true, ...clockStatus });
+  } catch (err) {
+    sendApiError(res, err);
+  }
+}
+
+export async function getTimonClockAlerts(_req: Request, res: Response) {
+  try {
+    const result = await cacheGetOrSet({
+      key: 'timon-clock-alerts',
+      ttlMs: CLOCK_STATUS_TTL_MS,
+      factory: () => getOpenPunchAlerts(),
+      staleWhileRevalidate: false,
+    });
+    res.json({ ok: true, ...result });
   } catch (err) {
     sendApiError(res, err);
   }

@@ -55,6 +55,17 @@ export const translations = {
       clock: {
         onShift: 'On shift',
         done: 'Done',
+        stillOnClock: 'Still on the clock',
+        stillOnClockSince: 'Still on the clock since {when}',
+        stillOnClockDrawer: 'Still on the clock — clocked in {when} and hasn’t clocked out. Check Tímon.',
+        alerts: {
+          label: 'Clock-in alerts',
+          labelWithCount: 'Clock-in alerts: {count}',
+          hasntClockedOut: '{name} hasn’t clocked out.',
+          since: 'since {when}',
+          checkTimon: 'Check Tímon',
+          empty: 'Everyone has clocked out',
+        },
       },
       drawer: {
         shiftDetailsTitle: 'Shift details',
@@ -293,6 +304,17 @@ export const translations = {
     clock: {
       onShift: 'Á vakt',
       done: 'Búið',
+      stillOnClock: 'Enn innstimplaður',
+      stillOnClockSince: 'Enn innstimplaður síðan {when}',
+      stillOnClockDrawer: 'Enn innstimplaður — stimplaði sig inn {when} og hefur ekki stimplað sig út. Athugaðu Tímon.',
+      alerts: {
+        label: 'Tilkynningar um stimplun',
+        labelWithCount: 'Tilkynningar um stimplun: {count}',
+        hasntClockedOut: '{name} hefur ekki stimplað sig út.',
+        since: 'síðan {when}',
+        checkTimon: 'Athugaðu Tímon',
+        empty: 'Allir hafa stimplað sig út',
+      },
     },
     drawer: {
       shiftDetailsTitle: 'Upplýsingar um vakt',

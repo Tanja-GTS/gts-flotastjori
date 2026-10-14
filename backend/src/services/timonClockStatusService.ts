@@ -1,12 +1,33 @@
+import { optionalEnv } from '../utils/env';
 import { resolveDriversBySsn } from './driversService';
 import { listHydratedShifts } from './shiftInstancesService';
+import { cacheGetOrSet } from './simpleCache';
 import { fetchTimonArrdeps, type ExternalArrdep } from './timonService';
 
 export type ShiftClockStatus = {
-  status: 'on-shift' | 'done';
+  // still-on-clock: the driver never clocked out of an earlier day's punch,
+  // shown on his later shifts until he does.
+  status: 'on-shift' | 'done' | 'still-on-clock';
   clockInAt: string;
   clockOutAt: string | null;
 };
+
+export type OpenPunchAlert = {
+  driverId: string;
+  driverName: string;
+  clockInAt: string;
+};
+
+const DAY_MS = 86_400_000;
+const ARRDEPS_TTL_MS = 45_000;
+// A punch counts as "not clocked out" once it started on an earlier day AND is
+// this old, so a night shift that crosses midnight is not flagged while it runs.
+const FORGOT_CLOCK_OUT_AFTER_MIN = 12 * 60;
+
+function lookbackDays(): number {
+  const n = Number(optionalEnv('TIMON_OPEN_PUNCH_LOOKBACK_DAYS', '14'));
+  return Number.isFinite(n) && n >= 1 ? Math.min(60, Math.floor(n)) : 14;
+}
 
 function normalizeSsn(raw: unknown): string {
   return String(raw ?? '').replace(/\s+/g, '').replace(/-/g, '');
@@ -37,19 +58,59 @@ function parseShiftWindow(time: unknown): { start: number; end: number } | null 
   return { start, end };
 }
 
-// Minutes-since-midnight of a Tímon punch relative to the shift's date.
-// Punches on the day after the shift date carry +24h (overnight shift clock-out).
-function punchMinutesOnDate(
-  punch: { date: string; minutes: number },
-  shiftDate: string
-): number | null {
-  if (punch.date === shiftDate) return punch.minutes;
-  const shiftDay = Date.parse(`${shiftDate}T00:00:00Z`);
-  const punchDay = Date.parse(`${punch.date}T00:00:00Z`);
-  if (!Number.isFinite(shiftDay) || !Number.isFinite(punchDay)) return null;
-  const deltaDays = Math.round((punchDay - shiftDay) / 86_400_000);
-  if (deltaDays < 0 || deltaDays > 1) return null;
-  return punch.minutes + deltaDays * 24 * 60;
+function addDaysIso(isoDate: string, days: number): string {
+  return new Date(Date.parse(`${isoDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+// Minutes from the start of `date` to a timestamp; a clock-out two days later is +2880.
+// Tímon timestamps are UTC-naive and Iceland is UTC, so they compare as UTC.
+function minutesFromDate(ts: { date: string; minutes: number }, date: string): number {
+  const days = Math.round((Date.parse(`${ts.date}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / DAY_MS);
+  return days * 24 * 60 + ts.minutes;
+}
+
+export function nowTs(): { date: string; minutes: number } {
+  const now = new Date();
+  return { date: now.toISOString().slice(0, 10), minutes: now.getUTCHours() * 60 + now.getUTCMinutes() };
+}
+
+export type ClockPunch = {
+  ssn: string;
+  inTs: { date: string; minutes: number };
+  outTs: { date: string; minutes: number } | null;
+  arr: string;
+  dep: string | null;
+};
+
+// Real clock-ins only: arrdeptype TI. Tímon's arrdeps also carries the planned
+// schedule (VK) and leave, which must never read as someone clocking in.
+export function punchesFromArrdeps(arrdeps: ExternalArrdep[]): ClockPunch[] {
+  const punches: ClockPunch[] = [];
+  for (const row of arrdeps) {
+    if (String(row.arrdeptype || '').toUpperCase() !== 'TI') continue;
+    const ssn = normalizeSsn(row.ssn);
+    const inTs = parseTimonTs(row.arr);
+    if (!ssn || !inTs) continue;
+    const outTs = row.dep ? parseTimonTs(row.dep) : null;
+    punches.push({ ssn, inTs, outTs, arr: String(row.arr), dep: row.dep ? String(row.dep) : null });
+  }
+  return punches;
+}
+
+async function loadPunches(fromdate: string, todate: string): Promise<ClockPunch[]> {
+  const arrdeps = await cacheGetOrSet<ExternalArrdep[]>({
+    key: `timon-arrdeps|${fromdate}|${todate}`,
+    ttlMs: ARRDEPS_TTL_MS,
+    factory: () => fetchTimonArrdeps({ fromdate, todate }),
+    staleWhileRevalidate: false,
+  });
+  return punchesFromArrdeps(arrdeps);
+}
+
+function forgotToClockOut(punch: ClockPunch, onDate: string, now: { date: string; minutes: number }): boolean {
+  if (punch.outTs) return false;
+  if (punch.inTs.date >= onDate) return false;
+  return minutesFromDate(now, punch.inTs.date) - punch.inTs.minutes >= FORGOT_CLOCK_OUT_AFTER_MIN;
 }
 
 type Punch = { inMin: number; outMin: number | null; arr: string; dep: string | null };
@@ -109,83 +170,133 @@ export function matchDriverPunchesToShifts(params: {
   return byShiftId;
 }
 
-/**
- * For a single day, work out which assigned shifts have their driver clocked in
- * (an open TI punch, see matchDriverPunchesToShifts) or clocked out ("done").
- * Stale punches from other days are ignored — a punch only counts if its clock-in
- * or clock-out falls on the shift's date.
- */
-export async function getShiftClockStatus(params: {
-  workspaceId: string;
-  date: string; // YYYY-MM-DD
-  arrdeps?: ExternalArrdep[];
-}): Promise<{ date: string; byShiftId: Record<string, ShiftClockStatus>; generatedAt: string }> {
-  const workspaceId = String(params.workspaceId || 'south').trim() || 'south';
-  const date = String(params.date || '').slice(0, 10);
-  const month = date.slice(0, 7);
-
-  const [shifts, arrdeps] = await Promise.all([
-    listHydratedShifts({ workspaceId, month }),
-    params.arrdeps ?? fetchTimonArrdeps({ fromdate: date, todate: date }),
-  ]);
-
-  // Real clock-in punches only (type TI), touching this date.
-  const punchesBySsn = new Map<string, Punch[]>();
-  for (const row of arrdeps) {
-    if (String(row.arrdeptype || '').toUpperCase() !== 'TI') continue;
-    const ssn = normalizeSsn(row.ssn);
-    if (!ssn) continue;
-    const arrTs = parseTimonTs(row.arr);
-    const depTs = row.dep ? parseTimonTs(row.dep) : null;
-    if (!arrTs) continue;
-    if (arrTs.date !== date && depTs?.date !== date) continue;
-
-    const inMin = punchMinutesOnDate(arrTs, date);
-    if (inMin == null) continue;
-    const outMin = depTs ? punchMinutesOnDate(depTs, date) : null;
-    const bucket = punchesBySsn.get(ssn) ?? [];
-    bucket.push({ inMin, outMin, arr: String(row.arr), dep: row.dep ? String(row.dep) : null });
-    punchesBySsn.set(ssn, bucket);
+/** Pure core of getShiftClockStatus, separate so it can be checked without Tímon or SharePoint. */
+export function buildClockStatuses(params: {
+  shifts: Array<{ id: string; date: string; time: string; driverId?: string }>;
+  punches: ClockPunch[];
+  driverIdBySsn: Map<string, string>;
+  from: string;
+  to: string;
+  now: { date: string; minutes: number };
+}): Record<string, ShiftClockStatus> {
+  const { shifts, punches, driverIdBySsn, from, to, now } = params;
+  const punchesByDriverId = new Map<string, ClockPunch[]>();
+  for (const punch of punches) {
+    const driverId = driverIdBySsn.get(punch.ssn);
+    if (!driverId) continue;
+    const bucket = punchesByDriverId.get(driverId) ?? [];
+    bucket.push(punch);
+    punchesByDriverId.set(driverId, bucket);
   }
 
-  if (punchesBySsn.size === 0) {
-    return { date, byShiftId: {}, generatedAt: new Date().toISOString() };
-  }
-
-  const driversBySsn = await resolveDriversBySsn({ ssns: Array.from(punchesBySsn.keys()) });
-  const punchesByDriverId = new Map<string, Punch[]>();
-  for (const [ssn, driver] of driversBySsn) {
-    const punches = punchesBySsn.get(ssn);
-    if (punches) punchesByDriverId.set(driver.id, punches);
-  }
-
-  const now = new Date();
-  const nowMinutesUtc = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const nowMinutesOnDate = punchMinutesOnDate({ date: now.toISOString().slice(0, 10), minutes: nowMinutesUtc }, date);
-
-  // Group each driver's shifts for the day, then place his punches among them.
-  const shiftsByDriverId = new Map<string, Array<{ id: string; start: number; end: number }>>();
+  // date -> driverId -> that driver's shifts on that date
+  const shiftsByDateDriver = new Map<string, Map<string, Array<{ id: string; start: number; end: number }>>>();
   for (const shift of shifts) {
-    if (shift.date !== date || !shift.driverId) continue;
+    if (!shift.driverId || shift.date < from || shift.date > to) continue;
     if (!punchesByDriverId.has(shift.driverId)) continue;
     const window = parseShiftWindow(shift.time);
     if (!window) continue;
-    const bucket = shiftsByDriverId.get(shift.driverId) ?? [];
+    const byDriver = shiftsByDateDriver.get(shift.date) ?? new Map();
+    const bucket = byDriver.get(shift.driverId) ?? [];
     bucket.push({ id: shift.id, ...window });
-    shiftsByDriverId.set(shift.driverId, bucket);
+    byDriver.set(shift.driverId, bucket);
+    shiftsByDateDriver.set(shift.date, byDriver);
   }
 
   const byShiftId: Record<string, ShiftClockStatus> = {};
-  for (const [driverId, driverShifts] of shiftsByDriverId) {
-    Object.assign(
-      byShiftId,
-      matchDriverPunchesToShifts({
+  for (const [date, byDriver] of shiftsByDateDriver) {
+    for (const [driverId, driverShifts] of byDriver) {
+      const driverPunches = punchesByDriverId.get(driverId) ?? [];
+      const sameDay: Punch[] = driverPunches
+        .filter((p) => p.inTs.date === date)
+        .map((p) => ({
+          inMin: p.inTs.minutes,
+          outMin: p.outTs ? minutesFromDate(p.outTs, date) : null,
+          arr: p.arr,
+          dep: p.dep,
+        }));
+      const statuses = matchDriverPunchesToShifts({
         shifts: driverShifts,
-        punches: punchesByDriverId.get(driverId) ?? [],
-        nowMinutes: nowMinutesOnDate,
-      })
-    );
+        punches: sameDay,
+        nowMinutes: minutesFromDate(now, date),
+      });
+
+      const forgotten = driverPunches
+        .filter((p) => forgotToClockOut(p, date, now))
+        .sort((a, b) => a.arr.localeCompare(b.arr))[0];
+      for (const shift of driverShifts) {
+        if (statuses[shift.id]) byShiftId[shift.id] = statuses[shift.id];
+        else if (forgotten) {
+          byShiftId[shift.id] = { status: 'still-on-clock', clockInAt: forgotten.arr, clockOutAt: null };
+        }
+      }
+    }
   }
 
-  return { date, byShiftId, generatedAt: new Date().toISOString() };
+  return byShiftId;
+}
+
+/**
+ * Clock-in status for every assigned shift dated `from`..`to` (future days are
+ * skipped). Each punch belongs to the day it was clocked in on, so a punch from
+ * yesterday that was only clocked out this morning stays on yesterday's card.
+ * A driver who never clocked out of an earlier day gets 'still-on-clock' on his
+ * later shifts that have no clock-in of their own.
+ */
+export async function getShiftClockStatus(params: {
+  workspaceId: string;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+}): Promise<{ from: string; to: string; byShiftId: Record<string, ShiftClockStatus>; generatedAt: string }> {
+  const workspaceId = String(params.workspaceId || 'south').trim() || 'south';
+  const from = String(params.from || '').slice(0, 10);
+  const now = nowTs();
+  const requestedTo = String(params.to || from).slice(0, 10);
+  const to = requestedTo < now.date ? requestedTo : now.date;
+  const generatedAt = new Date().toISOString();
+  if (!from || from > to) return { from, to: requestedTo, byShiftId: {}, generatedAt };
+
+  const months: string[] = [];
+  for (let d = from; d <= to; d = addDaysIso(d, 1)) {
+    if (!months.includes(d.slice(0, 7))) months.push(d.slice(0, 7));
+  }
+
+  const [shiftPages, punches] = await Promise.all([
+    Promise.all(months.map((month) => listHydratedShifts({ workspaceId, month }))),
+    loadPunches(addDaysIso(from, -lookbackDays()), to),
+  ]);
+  if (punches.length === 0) return { from, to: requestedTo, byShiftId: {}, generatedAt };
+
+  const driversBySsn = await resolveDriversBySsn({ ssns: Array.from(new Set(punches.map((p) => p.ssn))) });
+  const byShiftId = buildClockStatuses({
+    shifts: shiftPages.flat(),
+    punches,
+    driverIdBySsn: new Map(Array.from(driversBySsn, ([ssn, driver]) => [ssn, driver.id])),
+    from,
+    to,
+    now,
+  });
+
+  return { from, to: requestedTo, byShiftId, generatedAt };
+}
+
+/**
+ * Drivers still clocked in from an earlier day, oldest first - one row per
+ * driver, whether or not he has a shift today. Feeds the header bell.
+ */
+export async function getOpenPunchAlerts(): Promise<{ alerts: OpenPunchAlert[]; generatedAt: string }> {
+  const now = nowTs();
+  const punches = await loadPunches(addDaysIso(now.date, -lookbackDays()), now.date);
+  const open = punches.filter((p) => forgotToClockOut(p, now.date, now));
+  if (open.length === 0) return { alerts: [], generatedAt: new Date().toISOString() };
+
+  const driversBySsn = await resolveDriversBySsn({ ssns: Array.from(new Set(open.map((p) => p.ssn))) });
+  const byDriverId = new Map<string, OpenPunchAlert>();
+  for (const punch of open.sort((a, b) => a.arr.localeCompare(b.arr))) {
+    // Only our drivers: Tímon also holds office staff and others.
+    const driver = driversBySsn.get(punch.ssn);
+    if (!driver || byDriverId.has(driver.id)) continue;
+    byDriverId.set(driver.id, { driverId: driver.id, driverName: driver.name, clockInAt: punch.arr });
+  }
+  return { alerts: Array.from(byDriverId.values()), generatedAt: new Date().toISOString() };
 }

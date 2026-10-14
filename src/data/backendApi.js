@@ -1,3 +1,5 @@
+const SAMPLE_DATA = String(import.meta.env?.VITE_SAMPLE_DATA || '').trim() === 'true';
+
 function getBaseUrl() {
   // When running `vite dev`, we proxy `/api` to the backend.
   // If you ever deploy separately, set VITE_BACKEND_URL (e.g. https://api.example.com).
@@ -27,6 +29,12 @@ async function withAuth(init = {}) {
 }
 
 async function fetchJson(url, init) {
+  // Local preview with made-up data, no backend needed: VITE_SAMPLE_DATA=true.
+  if (SAMPLE_DATA) {
+    const { sampleResponse } = await import('./sampleData.js');
+    return sampleResponse(url, init);
+  }
+
   let res;
   try {
     res = await fetch(url, await withAuth(init));
@@ -110,14 +118,23 @@ export async function fetchShifts({ workspaceId, month }) {
   return data.shifts || [];
 }
 
-export async function fetchClockStatus({ workspaceId, date }) {
+// Clock-in status for every assigned shift dated from..to (YYYY-MM-DD).
+export async function fetchClockStatus({ workspaceId, from, to }) {
   const base = getBaseUrl();
   const qs = new URLSearchParams();
   if (workspaceId) qs.set('workspaceId', workspaceId);
-  if (date) qs.set('date', date);
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
 
   const data = await fetchJson(`${base}/api/timon/clock-status?${qs.toString()}`);
   return data.byShiftId || {};
+}
+
+// Drivers still clocked in from an earlier day (header bell).
+export async function fetchClockAlerts() {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/timon/clock-alerts`);
+  return data.alerts || [];
 }
 
 export async function generateShifts({ workspaceId, month }) {

@@ -11,6 +11,8 @@ import { getTripsForShift } from './domain/tripsTemplate';
 import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekOnly, fetchClockStatus } from './data/backendApi';
 import { notifications } from '@mantine/notifications';
 import { useI18n } from './i18n';
+import ClockAlertsBell from './ClockAlertsBell';
+import { clockTimeOnShiftDay, clockWhen } from './domain/clockFormat';
 
 const fallbackDrivers = ['Ahmed', 'Jon', 'Maria', 'Sara'].map((name) => ({ value: name, label: name, name }));
 
@@ -716,17 +718,20 @@ export default function Timeline({
 
   const todayISO = format(new Date(), 'yyyy-MM-dd');
 
-  // Live "on shift" / "done" clock-in status from Tímon, for today's shifts only.
+  // Clock-in status from Tímon for every visible day up to today. Polled while
+  // today is in view; past days are fetched once (they rarely change).
   const [clockByShiftId, setClockByShiftId] = useState({});
   const todayInView = dayDates.some((d) => format(d, 'yyyy-MM-dd') === todayISO);
+  const viewFromISO = dayDates.length ? format(dayDates[0], 'yyyy-MM-dd') : '';
+  const viewToISO = dayDates.length ? format(dayDates[dayDates.length - 1], 'yyyy-MM-dd') : '';
   useEffect(() => {
-    if (!todayInView || !workspaceId) {
+    if (!workspaceId || !viewFromISO || viewFromISO > todayISO) {
       setClockByShiftId({});
       return;
     }
     let cancelled = false;
     const load = () => {
-      fetchClockStatus({ workspaceId, date: todayISO })
+      fetchClockStatus({ workspaceId, from: viewFromISO, to: viewToISO })
         .then((byShiftId) => {
           if (!cancelled) setClockByShiftId(byShiftId || {});
         })
@@ -738,12 +743,12 @@ export default function Timeline({
         });
     };
     load();
-    const timer = setInterval(load, 60_000);
+    const timer = todayInView ? setInterval(load, 60_000) : null;
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [todayInView, workspaceId, todayISO]);
+  }, [todayInView, workspaceId, todayISO, viewFromISO, viewToISO]);
 
   const monthStartISO = format(
     new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), 1),
@@ -771,9 +776,13 @@ export default function Timeline({
         <div className="appHeader__inner">
           {/* Mobile only: workspace pill + menu button (Figma: App bar) */}
           <div className="appHeader__mobileTop">
-            <span className="workspacePill">
-              {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
-            </span>
+            {/* Bell on the left, away from the menu, so both can be open at once. */}
+            <div className="appHeader__mobileTopLeft">
+              {isMobile && <ClockAlertsBell className="clockBell--mobile" />}
+              <span className="workspacePill">
+                {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
+              </span>
+            </div>
             <button
               type="button"
               className="appHeader__burger"
@@ -919,6 +928,7 @@ export default function Timeline({
                 {langToggleLabel}
               </button>
               <div className="appHeader__separator" aria-hidden="true" />
+              {!isMobile && <ClockAlertsBell />}
               <Menu shadow="sm" width={200} radius={0} position="bottom-end">
                 <Menu.Target>
                   <button className="appHeader__menu" type="button" aria-label="Menu">
@@ -1440,7 +1450,7 @@ export default function Timeline({
                                   : '';
 
                         const driverText = shift.driver && shift.driver !== 'Unassigned' ? shift.driver : '';
-                        const clock = cellDate === todayISO ? clockByShiftId[shift.token] : null;
+                        const clock = clockByShiftId[shift.token] || null;
 
                         return (
                       <div
@@ -1485,12 +1495,16 @@ export default function Timeline({
                           <div
                             className={`shift-clock shift-clock--${clock.status}`}
                             title={clock.status === 'on-shift'
-                              ? `${t('timeline.clock.onShift')} · ${String(clock.clockInAt || '').slice(11, 16)}`
-                              : `${t('timeline.clock.done')} · ${String(clock.clockOutAt || '').slice(11, 16)}`}
+                              ? `${t('timeline.clock.onShift')} · ${clockTimeOnShiftDay(clock.clockInAt, cellDate, t)}`
+                              : clock.status === 'still-on-clock'
+                                ? t('timeline.clock.stillOnClockSince', { when: clockWhen(clock.clockInAt, t) })
+                                : `${t('timeline.clock.done')} · ${clockTimeOnShiftDay(clock.clockInAt, cellDate, t)}–${clockTimeOnShiftDay(clock.clockOutAt, cellDate, t)}`}
                           >
                             {clock.status === 'on-shift'
                               ? `✓ ${t('timeline.clock.onShift')}`
-                              : t('timeline.clock.done')}
+                              : clock.status === 'still-on-clock'
+                                ? `⚠ ${t('timeline.clock.stillOnClock')}`
+                                : t('timeline.clock.done')}
                           </div>
                         ) : null}
 
@@ -1712,25 +1726,29 @@ export default function Timeline({
               ) : null}
 
               {(() => {
-                const clock = selectedShift.date === todayISO ? clockByShiftId[selectedShift.token] : null;
+                const clock = clockByShiftId[selectedShift.token] || null;
                 if (!clock) return null;
                 const onShift = clock.status === 'on-shift';
+                const still = clock.status === 'still-on-clock';
+                const shiftDay = String(selectedShift.date || '').slice(0, 10);
                 return (
                   <div
                     style={{
                       margin: '16px 0 0',
                       padding: '10px 14px',
-                      background: onShift ? '#dcfce7' : 'var(--accent)',
-                      border: `1px solid ${onShift ? '#bbf7d0' : 'var(--border)'}`,
+                      background: onShift ? '#dcfce7' : still ? '#fef3c7' : 'var(--accent)',
+                      border: `1px solid ${onShift ? '#bbf7d0' : still ? '#fde68a' : 'var(--border)'}`,
                       borderRadius: 6,
                       fontSize: 13,
                       fontWeight: 600,
-                      color: onShift ? '#15803d' : 'var(--muted)',
+                      color: onShift ? '#15803d' : still ? '#92400e' : 'var(--muted)',
                     }}
                   >
                     {onShift
-                      ? `✓ ${t('timeline.clock.onShift')} — ${t('timeline.drawer.clockedInAt')} ${String(clock.clockInAt || '').slice(11, 16)}`
-                      : `${t('timeline.clock.done')} — ${String(clock.clockInAt || '').slice(11, 16)}–${String(clock.clockOutAt || '').slice(11, 16)}`}
+                      ? `✓ ${t('timeline.clock.onShift')} — ${t('timeline.drawer.clockedInAt')} ${clockTimeOnShiftDay(clock.clockInAt, shiftDay, t)}`
+                      : still
+                        ? `⚠ ${t('timeline.clock.stillOnClockDrawer', { when: clockWhen(clock.clockInAt, t) })}`
+                        : `${t('timeline.clock.done')} — ${clockTimeOnShiftDay(clock.clockInAt, shiftDay, t)} – ${clockTimeOnShiftDay(clock.clockOutAt, shiftDay, t)}`}
                   </div>
                 );
               })()}
