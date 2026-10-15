@@ -155,15 +155,6 @@ function clockStatus(from, to) {
   return byShiftId;
 }
 
-function clockAlerts() {
-  const t = today();
-  return [
-    { driverId: 'd3', driverName: 'Marek Svoboda', clockInAt: stamp(addDays(t, -2), '06:02') },
-    // No shift today: only the bell can show him.
-    { driverId: 'd7', driverName: 'Tomasz Kowalski', clockInAt: stamp(addDays(t, -5), '14:55') },
-  ];
-}
-
 export async function sampleResponse(url, init) {
   const u = new URL(String(url), 'http://sample.local');
   const method = String(init?.method || 'GET').toUpperCase();
@@ -178,12 +169,10 @@ export async function sampleResponse(url, init) {
       return { ok: true, shifts: q('month') ? buildMonth(q('month')) : [] };
     case '/api/timon/clock-status':
       return { ok: true, byShiftId: clockStatus(q('from') || q('date') || today(), q('to') || q('date') || today()) };
-    case '/api/timon/clock-alerts':
-      return { ok: true, alerts: clockAlerts() };
     case '/api/workspaces':
       return { ok: true, workspaces: [{ id: WORKSPACE, name: 'South Iceland (sample)' }] };
     case '/api/drivers':
-      return { ok: true, drivers: [...DRIVERS, { id: 'd7', name: 'Tomasz Kowalski' }].map((d) => ({ ...d, email: '', phone: '' })) };
+      return { ok: true, drivers: DRIVERS.map((d) => ({ ...d, email: '', phone: '' })) };
     case '/api/buses':
       return { ok: true, buses: [{ id: 'b1', title: 'AB-123' }, { id: 'b2', title: 'CD-456' }] };
     default:

@@ -130,13 +130,6 @@ export async function fetchClockStatus({ workspaceId, from, to }) {
   return data.byShiftId || {};
 }
 
-// Drivers still clocked in from an earlier day (header bell).
-export async function fetchClockAlerts() {
-  const base = getBaseUrl();
-  const data = await fetchJson(`${base}/api/timon/clock-alerts`);
-  return data.alerts || [];
-}
-
 export async function generateShifts({ workspaceId, month }) {
   const base = getBaseUrl();
   const qs = new URLSearchParams();

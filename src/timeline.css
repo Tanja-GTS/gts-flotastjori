@@ -1412,7 +1412,7 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
   color: #92400e;
 }
 
-/* ===== Clock-in alerts bell (header) ===== */
+/* ===== Notifications bell (header) ===== */
 .clockBell {
   position: relative;
   width: 56px;
@@ -1672,7 +1672,7 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
     display: none;
   }
 
-  /* Row 1: bell + workspace pill on the left, burger on the right */
+  /* Row 1: workspace pill on the left; bell + burger on the right */
   .appHeader__mobileTop {
     display: flex;
     align-items: center;
@@ -1681,17 +1681,16 @@ body, html, #root, .timelinePage, .timelineMain, .timelineViewport, .monthbar__p
     padding: 0 16px;
   }
 
-  .appHeader__mobileTopLeft {
+  .appHeader__mobileTopRight {
     display: flex;
     align-items: center;
     gap: 4px;
-    min-width: 0;
+    margin-right: -10px;
   }
 
   .clockBell--mobile {
     width: 44px;
     height: 44px;
-    margin-left: -10px;
     border-radius: 4px;
   }
 

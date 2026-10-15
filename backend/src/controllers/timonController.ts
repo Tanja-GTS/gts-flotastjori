@@ -1,10 +1,11 @@
 import type { Request, Response } from 'express';
 import { getTimonReadiness, previewTimonShiftMatching } from '../services/timonPreviewService';
 import { syncTimonShiftAssignments } from '../services/timonSyncService';
-import { getOpenPunchAlerts, getShiftClockStatus } from '../services/timonClockStatusService';
+import { getShiftClockStatus } from '../services/timonClockStatusService';
 import type { ExternalShiftPlan } from '../services/timonService';
 import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
+import { getCachedShifts } from './shiftsController';
 
 const CLOCK_STATUS_TTL_MS = 45_000;
 
@@ -78,26 +79,12 @@ export async function getTimonClockStatus(req: Request, res: Response) {
     const clockStatus = await cacheGetOrSet({
       key: `timon-clock|${workspaceId}|${from}|${to}`,
       ttlMs: CLOCK_STATUS_TTL_MS,
-      factory: () => getShiftClockStatus({ workspaceId, from, to }),
+      factory: () => getShiftClockStatus({ workspaceId, from, to, loadShifts: getCachedShifts }),
       // Live data: never serve an old answer. With background refresh, a Tímon
       // outage kept returning the last (often empty, pre-clock-in) result all day.
       staleWhileRevalidate: false,
     });
     res.json({ ok: true, ...clockStatus });
-  } catch (err) {
-    sendApiError(res, err);
-  }
-}
-
-export async function getTimonClockAlerts(_req: Request, res: Response) {
-  try {
-    const result = await cacheGetOrSet({
-      key: 'timon-clock-alerts',
-      ttlMs: CLOCK_STATUS_TTL_MS,
-      factory: () => getOpenPunchAlerts(),
-      staleWhileRevalidate: false,
-    });
-    res.json({ ok: true, ...result });
   } catch (err) {
     sendApiError(res, err);
   }

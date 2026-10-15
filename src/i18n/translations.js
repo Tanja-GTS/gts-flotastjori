@@ -1,5 +1,9 @@
 export const translations = {
   en: {
+    notifications: {
+      label: 'Notifications',
+      empty: 'No new notifications',
+    },
     lang: {
       label: 'Language',
       en: 'English',
@@ -58,14 +62,6 @@ export const translations = {
         stillOnClock: 'Still on the clock',
         stillOnClockSince: 'Still on the clock since {when}',
         stillOnClockDrawer: 'Still on the clock — clocked in {when} and hasn’t clocked out. Check Tímon.',
-        alerts: {
-          label: 'Clock-in alerts',
-          labelWithCount: 'Clock-in alerts: {count}',
-          hasntClockedOut: '{name} hasn’t clocked out.',
-          since: 'since {when}',
-          checkTimon: 'Check Tímon',
-          empty: 'No new notifications',
-        },
       },
       drawer: {
         shiftDetailsTitle: 'Shift details',
@@ -246,6 +242,10 @@ export const translations = {
 
   // Fill these in when ready. Any missing keys automatically fall back to English.
   is: {
+  notifications: {
+    label: 'Tilkynningar',
+    empty: 'Engar nýjar tilkynningar',
+  },
   lang: {
     label: 'Tungumál',
     en: 'Enska',
@@ -307,14 +307,6 @@ export const translations = {
       stillOnClock: 'Enn innstimplaður',
       stillOnClockSince: 'Enn innstimplaður síðan {when}',
       stillOnClockDrawer: 'Enn innstimplaður — stimplaði sig inn {when} og hefur ekki stimplað sig út. Athugaðu Tímon.',
-      alerts: {
-        label: 'Tilkynningar um stimplun',
-        labelWithCount: 'Tilkynningar um stimplun: {count}',
-        hasntClockedOut: '{name} hefur ekki stimplað sig út.',
-        since: 'síðan {when}',
-        checkTimon: 'Athugaðu Tímon',
-        empty: 'Engar nýjar tilkynningar',
-      },
     },
     drawer: {
       shiftDetailsTitle: 'Upplýsingar um vakt',

@@ -166,7 +166,12 @@ function dedupeHydratedShifts(shifts: HydratedShiftDto[]): HydratedShiftDto[] {
       if (x.notes && String(x.notes).trim()) v += 1;
       return v;
     };
-    if (score(s) > score(existing)) byKey.set(key, s);
+    // Equal scores: the oldest list item wins, so the choice never depends on
+    // the order SharePoint happened to return the rows in.
+    const diff = score(s) - score(existing);
+    if (diff > 0 || (diff === 0 && numericIdOrInfinity(s.id) < numericIdOrInfinity(existing.id))) {
+      byKey.set(key, s);
+    }
   }
 
   // Drop any winner whose pattern season explicitly excludes its date.

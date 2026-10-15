@@ -11,7 +11,7 @@ import { getTripsForShift } from './domain/tripsTemplate';
 import { assignDriverAndEmail, assignDriverOnly, assignWeekAndEmail, assignWeekOnly, fetchClockStatus } from './data/backendApi';
 import { notifications } from '@mantine/notifications';
 import { useI18n } from './i18n';
-import ClockAlertsBell from './ClockAlertsBell';
+import NotificationsBell from './NotificationsBell';
 import { clockTimeOnShiftDay, clockWhen } from './domain/clockFormat';
 
 const fallbackDrivers = ['Ahmed', 'Jon', 'Maria', 'Sara'].map((name) => ({ value: name, label: name, name }));
@@ -776,29 +776,28 @@ export default function Timeline({
         <div className="appHeader__inner">
           {/* Mobile only: workspace pill + menu button (Figma: App bar) */}
           <div className="appHeader__mobileTop">
-            {/* Bell on the left, away from the menu, so both can be open at once. */}
-            <div className="appHeader__mobileTopLeft">
-              {isMobile && <ClockAlertsBell className="clockBell--mobile" />}
-              <span className="workspacePill">
-                {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
-              </span>
+            <span className="workspacePill">
+              {workspaceOptions.find((w) => w.value === workspaceId)?.label || t('common.selectWorkspace')}
+            </span>
+            <div className="appHeader__mobileTopRight">
+              {isMobile && <NotificationsBell className="clockBell--mobile" />}
+              <button
+                type="button"
+                className="appHeader__burger"
+                aria-label={t('nav.menu')}
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M3.75 6.75H20.25M3.75 12H20.25M12 17.25H20.25"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
             </div>
-            <button
-              type="button"
-              className="appHeader__burger"
-              aria-label={t('nav.menu')}
-              onClick={() => setMobileMenuOpen(true)}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M3.75 6.75H20.25M3.75 12H20.25M12 17.25H20.25"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
           </div>
 
           <div className="appHeader__left">
@@ -928,7 +927,7 @@ export default function Timeline({
                 {langToggleLabel}
               </button>
               <div className="appHeader__separator" aria-hidden="true" />
-              {!isMobile && <ClockAlertsBell />}
+              {!isMobile && <NotificationsBell />}
               <Menu shadow="sm" width={200} radius={0} position="bottom-end">
                 <Menu.Target>
                   <button className="appHeader__menu" type="button" aria-label="Menu">

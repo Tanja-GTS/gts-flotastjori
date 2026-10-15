@@ -57,9 +57,16 @@ function makeShiftsFactory(workspaceId: string | undefined, month: string | unde
 }
 
 export async function warmShiftCache(workspaceId: string, month: string): Promise<void> {
-  const cacheKey = `shifts|${workspaceId}|${month}`;
-  await cacheGetOrSet({
-    key: cacheKey,
+  await getCachedShifts(workspaceId, month);
+}
+
+// The exact shift list the schedule serves. Anything drawn on top of the cards
+// (clock-in badges) must use this, not a fresh load: two loads can pick
+// different copies of a duplicated shift, and the badge then lands on the
+// copy that is not on screen.
+export function getCachedShifts(workspaceId: string, month: string) {
+  return cacheGetOrSet({
+    key: `shifts|${workspaceId}|${month}`,
     ttlMs: SHIFTS_TTL_MS,
     factory: makeShiftsFactory(workspaceId, month),
   });

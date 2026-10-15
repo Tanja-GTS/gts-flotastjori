@@ -1,6 +1,6 @@
 import { optionalEnv } from '../utils/env';
 import { resolveDriversBySsn } from './driversService';
-import { listHydratedShifts } from './shiftInstancesService';
+import { listHydratedShifts, type HydratedShiftDto } from './shiftInstancesService';
 import { cacheGetOrSet } from './simpleCache';
 import { fetchTimonArrdeps, type ExternalArrdep } from './timonService';
 
@@ -12,17 +12,8 @@ export type ShiftClockStatus = {
   clockOutAt: string | null;
 };
 
-export type OpenPunchAlert = {
-  driverId: string;
-  driverName: string;
-  clockInAt: string;
-};
-
 const DAY_MS = 86_400_000;
 const ARRDEPS_TTL_MS = 45_000;
-// A punch counts as "not clocked out" once it started on an earlier day AND is
-// this old, so a night shift that crosses midnight is not flagged while it runs.
-const FORGOT_CLOCK_OUT_AFTER_MIN = 12 * 60;
 
 function lookbackDays(): number {
   const n = Number(optionalEnv('TIMON_OPEN_PUNCH_LOOKBACK_DAYS', '14'));
@@ -107,10 +98,9 @@ async function loadPunches(fromdate: string, todate: string): Promise<ClockPunch
   return punchesFromArrdeps(arrdeps);
 }
 
-function forgotToClockOut(punch: ClockPunch, onDate: string, now: { date: string; minutes: number }): boolean {
-  if (punch.outTs) return false;
-  if (punch.inTs.date >= onDate) return false;
-  return minutesFromDate(now, punch.inTs.date) - punch.inTs.minutes >= FORGOT_CLOCK_OUT_AFTER_MIN;
+// Still open, and clocked in on an earlier day than `onDate`.
+function forgotToClockOut(punch: ClockPunch, onDate: string): boolean {
+  return !punch.outTs && punch.inTs.date < onDate;
 }
 
 type Punch = { inMin: number; outMin: number | null; arr: string; dep: string | null };
@@ -222,7 +212,7 @@ export function buildClockStatuses(params: {
       });
 
       const forgotten = driverPunches
-        .filter((p) => forgotToClockOut(p, date, now))
+        .filter((p) => forgotToClockOut(p, date))
         .sort((a, b) => a.arr.localeCompare(b.arr))[0];
       for (const shift of driverShifts) {
         if (statuses[shift.id]) byShiftId[shift.id] = statuses[shift.id];
@@ -247,6 +237,9 @@ export async function getShiftClockStatus(params: {
   workspaceId: string;
   from: string; // YYYY-MM-DD
   to: string; // YYYY-MM-DD
+  // Where to get the shifts from. Pass the schedule's own (cached) list so
+  // badges are keyed to the very cards on screen.
+  loadShifts?: (workspaceId: string, month: string) => Promise<HydratedShiftDto[]>;
 }): Promise<{ from: string; to: string; byShiftId: Record<string, ShiftClockStatus>; generatedAt: string }> {
   const workspaceId = String(params.workspaceId || 'south').trim() || 'south';
   const from = String(params.from || '').slice(0, 10);
@@ -262,7 +255,11 @@ export async function getShiftClockStatus(params: {
   }
 
   const [shiftPages, punches] = await Promise.all([
-    Promise.all(months.map((month) => listHydratedShifts({ workspaceId, month }))),
+    Promise.all(
+      months.map((month) =>
+        params.loadShifts ? params.loadShifts(workspaceId, month) : listHydratedShifts({ workspaceId, month })
+      )
+    ),
     loadPunches(addDaysIso(from, -lookbackDays()), to),
   ]);
   if (punches.length === 0) return { from, to: requestedTo, byShiftId: {}, generatedAt };
@@ -278,25 +275,4 @@ export async function getShiftClockStatus(params: {
   });
 
   return { from, to: requestedTo, byShiftId, generatedAt };
-}
-
-/**
- * Drivers still clocked in from an earlier day, oldest first - one row per
- * driver, whether or not he has a shift today. Feeds the header bell.
- */
-export async function getOpenPunchAlerts(): Promise<{ alerts: OpenPunchAlert[]; generatedAt: string }> {
-  const now = nowTs();
-  const punches = await loadPunches(addDaysIso(now.date, -lookbackDays()), now.date);
-  const open = punches.filter((p) => forgotToClockOut(p, now.date, now));
-  if (open.length === 0) return { alerts: [], generatedAt: new Date().toISOString() };
-
-  const driversBySsn = await resolveDriversBySsn({ ssns: Array.from(new Set(open.map((p) => p.ssn))) });
-  const byDriverId = new Map<string, OpenPunchAlert>();
-  for (const punch of open.sort((a, b) => a.arr.localeCompare(b.arr))) {
-    // Only our drivers: Tímon also holds office staff and others.
-    const driver = driversBySsn.get(punch.ssn);
-    if (!driver || byDriverId.has(driver.id)) continue;
-    byDriverId.set(driver.id, { driverId: driver.id, driverName: driver.name, clockInAt: punch.arr });
-  }
-  return { alerts: Array.from(byDriverId.values()), generatedAt: new Date().toISOString() };
 }
