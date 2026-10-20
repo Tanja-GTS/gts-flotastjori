@@ -12,7 +12,6 @@ export const translations = {
     nav: {
       drivers: 'Drivers',
       timetables: 'Timetables',
-      timetablesInProgress: 'Timetables (in progress)',
       menu: 'Menu',
       changeWorkspace: 'Change workspace',
     },
@@ -182,12 +181,37 @@ export const translations = {
 
     timetables: {
       title: 'Timetables',
-      selectAll: 'Select all',
       print: 'Print',
-      preview: 'Preview',
-      empty: 'No timetables for this season yet. Open a month with shifts first.',
+      printCount: 'Print ({count})',
+      selectAllInRoute: 'Select all sheets in {route}',
+      loading: 'Loading timetables…',
+      loadFailed: 'Could not load timetables.',
+      empty: 'No timetables yet.',
+      noSheets: 'No sheets in this season.',
       noTrips: 'This shift has no trips defined.',
       stopRow: 'Stop',
+      active: 'Active',
+      inactive: 'Inactive',
+      open: 'Open',
+      duration: 'Duration: {from} - {to}',
+      seasonNotFound: 'This season was not found.',
+      filterRoutes: 'Show route first',
+      seasonTitles: {
+        winter: 'Winter schedule',
+        summer: 'Summer schedule',
+        'all-year': 'All-year schedule',
+      },
+      seasonTitleFallback: '{season} schedule',
+      seasonCrumbs: {
+        winter: 'Winter',
+        summer: 'Summer',
+        'all-year': 'All year',
+      },
+      shiftTypes: {
+        morning: 'Morning',
+        evening: 'Evening',
+        single: 'Single',
+      },
     },
 
     date: {
@@ -255,7 +279,6 @@ export const translations = {
   nav: {
     drivers: 'Bílstjórar',
     timetables: 'Tímatöflur',
-    timetablesInProgress: 'Tímatöflur (í vinnslu)',
     menu: 'Valmynd',
     changeWorkspace: 'Skipta um vinnusvæði',
   },
@@ -430,12 +453,37 @@ export const translations = {
 
   timetables: {
     title: 'Tímatöflur',
-    selectAll: 'Velja allt',
     print: 'Prenta',
-    preview: 'Forskoðun',
-    empty: 'Engar tímatöflur fyrir þetta tímabil. Opnaðu mánuð með vöktum fyrst.',
+    printCount: 'Prenta ({count})',
+    selectAllInRoute: 'Velja allar töflur fyrir {route}',
+    loading: 'Hleð tímatöflum…',
+    loadFailed: 'Ekki tókst að sækja tímatöflur.',
+    empty: 'Engar tímatöflur enn.',
+    noSheets: 'Engar töflur á þessu tímabili.',
     noTrips: 'Engar ferðir skilgreindar fyrir þessa vakt.',
-    stopRow: 'Stopp',
+    stopRow: 'Hlé',
+    active: 'Virk',
+    inactive: 'Óvirk',
+    open: 'Opna',
+    duration: 'Tímabil: {from} - {to}',
+    seasonNotFound: 'Þetta tímabil fannst ekki.',
+    filterRoutes: 'Sýna leið efst',
+    seasonTitles: {
+      winter: 'Vetraráætlun',
+      summer: 'Sumaráætlun',
+      'all-year': 'Heilsársáætlun',
+    },
+    seasonTitleFallback: 'Áætlun: {season}',
+    seasonCrumbs: {
+      winter: 'Vetur',
+      summer: 'Sumar',
+      'all-year': 'Allt árið',
+    },
+    shiftTypes: {
+      morning: 'Morgunvakt',
+      evening: 'Kvöldvakt',
+      single: 'Stök vakt',
+    },
   },
 
   date: {

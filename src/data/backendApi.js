@@ -139,6 +139,15 @@ export async function generateShifts({ workspaceId, month }) {
   return fetchJson(`${base}/api/generate/shifts?${qs.toString()}`, { method: 'POST' });
 }
 
+// Seasons with their printable sheets (route + shift type + days + trips).
+export async function fetchTimetables({ workspaceId }) {
+  const base = getBaseUrl();
+  const qs = new URLSearchParams();
+  if (workspaceId) qs.set('workspaceId', workspaceId);
+  const data = await fetchJson(`${base}/api/timetables?${qs.toString()}`);
+  return data.seasons || [];
+}
+
 export async function fetchBuses() {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/buses`);

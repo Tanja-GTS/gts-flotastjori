@@ -530,10 +530,8 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="/timetables"
-          element={<Timetables shifts={shifts} workspaceId={workspaceId} />}
-        />
+        <Route path="/timetables" element={<Timetables workspaceId={workspaceId} />} />
+        <Route path="/timetables/:seasonId" element={<Timetables workspaceId={workspaceId} />} />
         <Route
           path="/drivers"
           element={<Drivers driverOptions={driverOptions} onDriverAdded={reloadDrivers} />}

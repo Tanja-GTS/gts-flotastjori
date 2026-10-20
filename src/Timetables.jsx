@@ -1,69 +1,103 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Accordion, Button, Checkbox, Group, SegmentedControl, Title } from '@mantine/core';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Checkbox } from '@mantine/core';
+import { IconChevronDown, IconChevronUp, IconCoffee, IconMoon, IconPrinter, IconSun } from '@tabler/icons-react';
+import { fetchTimetables } from './data/backendApi';
 import { useI18n } from './i18n';
-import { compareRoutes } from './domain/selectors';
 import './timetables.css';
 
-const DOW_SHORT = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const DOW_ORDER = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+const WEEKEND = new Set(['sat', 'sun']);
+const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-function weekdayOf(isoDate) {
-  const d = new Date(`${String(isoDate || '').slice(0, 10)}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? '' : DOW_SHORT[d.getDay()];
+// Seasons per workspace, kept while the app is open so going from the season
+// list into a season (and back) does not load everything again.
+const loaded = new Map();
+
+function useTimetables(workspaceId) {
+  // Results are tagged with their workspace, so switching workspace shows
+  // "loading" instead of the previous workspace's seasons.
+  const [state, setState] = useState(() => ({ workspaceId, ...(loaded.get(workspaceId) || { status: 'loading', seasons: [] }) }));
+  useEffect(() => {
+    let cancelled = false;
+    fetchTimetables({ workspaceId })
+      .then((seasons) => {
+        const next = { status: 'ready', seasons };
+        loaded.set(workspaceId, next);
+        if (!cancelled) setState({ workspaceId, ...next });
+      })
+      .catch((err) => {
+        console.error('[timetables] load failed:', err);
+        if (!cancelled && !loaded.has(workspaceId)) setState({ workspaceId, status: 'error', seasons: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
+  if (state.workspaceId !== workspaceId) return loaded.get(workspaceId) || { status: 'loading', seasons: [] };
+  return state;
 }
 
-function titleCase(value) {
-  const s = String(value || '').trim();
-  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+// "2026-08-24" -> "24/08/26"
+function shortDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '';
 }
 
-// One printable sheet per pattern: route + shift type + week part + season.
-// The PDF header says MON-TUE-WED-THU-FRI, not a date, so instances collapse.
-function buildSheets(shifts, workspaceId) {
-  const byKey = new Map();
+function seasonTitle(season, t) {
+  const known = t(`timetables.seasonTitles.${season.id}`);
+  if (typeof known === 'string' && !known.startsWith('timetables.')) return known;
+  return t('timetables.seasonTitleFallback', { season: season.name || season.id });
+}
 
-  for (const s of shifts || []) {
-    if (s.workspaceId !== workspaceId) continue;
-    const route = String(s.route || '').trim();
-    if (!route) continue;
+function seasonCrumb(season, t) {
+  const known = t(`timetables.seasonCrumbs.${season.id}`);
+  if (typeof known === 'string' && !known.startsWith('timetables.')) return known;
+  return season.name || season.id;
+}
 
-    const season = String(s.season || '').trim();
-    const weekPart = String(s.weekPart || '').trim();
-    const shiftType = String(s.shiftType || '').trim();
-    const key = `${route}|${shiftType}|${weekPart}|${season}`;
+function shiftTypeLabel(type, t) {
+  const known = t(`timetables.shiftTypes.${type}`);
+  if (typeof known === 'string' && !known.startsWith('timetables.')) return known;
+  return type ? type.charAt(0).toUpperCase() + type.slice(1) : '';
+}
 
-    let sheet = byKey.get(key);
-    if (!sheet) {
-      sheet = {
-        key,
-        route,
-        routeName: String(s.routeName || '').trim(),
-        shiftType,
-        weekPart,
-        season,
-        time: String(s.time || '').trim(),
-        days: new Set(),
-        trips: [],
-      };
-      byKey.set(key, sheet);
-    }
-
-    const dow = weekdayOf(s.date);
-    if (dow) sheet.days.add(dow);
-    if (sheet.trips.length === 0 && Array.isArray(s.trips) && s.trips.length > 0) {
-      sheet.trips = s.trips;
-    }
-  }
-
-  return Array.from(byKey.values()).sort(
-    (a, b) => compareRoutes(a.route, b.route) || a.shiftType.localeCompare(b.shiftType)
+function DayChips({ days, size = 'md' }) {
+  const { t } = useI18n();
+  return (
+    <span className={`ttDays ttDays--${size}`}>
+      {DAY_ORDER.filter((d) => days.includes(d)).map((d) => (
+        <span key={d} className={`ttDay${WEEKEND.has(d) ? ' ttDay--weekend' : ''}`}>
+          {t(`date.weekdaysShort.${d}`)}
+        </span>
+      ))}
+    </span>
   );
 }
 
-function formatDays(days) {
-  return DOW_ORDER.filter((d) => days.has(d)).join('-');
+function Breadcrumbs({ items }) {
+  const { t } = useI18n();
+  return (
+    <nav className="ttBreadcrumbs" aria-label={t('drivers.breadcrumbs.label')}>
+      <Link to="/" className="ttBreadcrumbs__link">{t('drivers.breadcrumbs.home')}</Link>
+      {items.map((item) => (
+        <span key={item.label} className="ttBreadcrumbs__part">
+          <span className="ttBreadcrumbs__sep" aria-hidden="true">/</span>
+          {item.to ? <Link to={item.to} className="ttBreadcrumbs__link">{item.label}</Link> : <span>{item.label}</span>}
+        </span>
+      ))}
+    </nav>
+  );
 }
+
+function Duration({ season }) {
+  const { t } = useI18n();
+  if (!season.from && !season.to) return null;
+  return <p className="ttDuration">{t('timetables.duration', { from: shortDate(season.from), to: shortDate(season.to) })}</p>;
+}
+
+// ---------------------------------------------------------------------------
+// Printed sheet
+// ---------------------------------------------------------------------------
 
 // Each event gets a key that survives a trip skipping a stop, so a trip that
 // does not serve Landeyjahofn lines up with the others and shows "--".
@@ -89,12 +123,10 @@ function buildRows(trips) {
     }
     return { trip, map, order };
   });
-
-  if (indexed.length === 0) return { rows: [], trips: [] };
+  if (indexed.length === 0) return [];
 
   // The longest trip defines the row order; shorter ones fill in or show "--".
   const spine = indexed.reduce((a, b) => (b.order.length > a.order.length ? b : a), indexed[0]);
-
   const rows = spine.order.map((k) => {
     const ev = spine.map.get(k);
     return {
@@ -105,24 +137,54 @@ function buildRows(trips) {
     };
   });
 
-  return { rows, trips: indexed.map((t) => t.trip) };
+  // First and last stop of each leg (legs are split by the break) are bold.
+  return rows.map((row, i) => ({
+    ...row,
+    terminal:
+      row.type === 'stop' &&
+      (i === 0 || rows[i - 1].type === 'break' || i === rows.length - 1 || rows[i + 1].type === 'break'),
+  }));
+}
+
+// The route a trip runs on (51, or 73 when the shift switches route), from its stops.
+function tripRoutes(trip, fallback) {
+  const routes = [];
+  for (const ev of trip?.events || []) {
+    const m = String(ev?.route || '').match(/\d+/);
+    if (m && !routes.includes(m[0])) routes.push(m[0]);
+  }
+  return routes.length ? routes.join(' / ') : fallback;
+}
+
+function breakLength(minutes) {
+  const n = Number(minutes);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  return h ? `${h}h ${m} min` : `${m} min`;
+}
+
+function ShiftIcon({ type }) {
+  if (type === 'evening') return <IconMoon size={22} stroke={1.75} className="ttSheet__icon ttSheet__icon--evening" aria-hidden="true" />;
+  return <IconSun size={22} stroke={1.75} className="ttSheet__icon" aria-hidden="true" />;
 }
 
 function Sheet({ sheet }) {
   const { t } = useI18n();
-  const { rows, trips } = useMemo(() => buildRows(sheet.trips), [sheet.trips]);
+  const rows = useMemo(() => buildRows(sheet.trips), [sheet.trips]);
 
   return (
     <article className="ttSheet">
       <header className="ttSheet__head">
-        <div className="ttSheet__headLeft">
-          <div className="ttSheet__days">{formatDays(sheet.days) || '—'}</div>
-          <div className="ttSheet__name">{sheet.routeName || sheet.route}</div>
+        <div>
+          <div className="ttSheet__titleRow">
+            <span className="ttSheet__route">{sheet.route.replace(/-/g, '')}</span>
+            <ShiftIcon type={sheet.shiftType} />
+            <span className="ttSheet__type">{shiftTypeLabel(sheet.shiftType, t).toUpperCase()}</span>
+          </div>
+          <DayChips days={sheet.days} size="sm" />
         </div>
-        <div className="ttSheet__headRight">
-          {sheet.shiftType && <span className="ttSheet__type">{sheet.shiftType.toUpperCase()}</span>}
-          <span className="ttSheet__route">{sheet.route}</span>
-        </div>
+        <div className="ttSheet__name">{sheet.routeName}</div>
       </header>
 
       {rows.length === 0 ? (
@@ -131,66 +193,102 @@ function Sheet({ sheet }) {
         <table className="ttSheet__table">
           <thead>
             <tr>
-              <th />
-              {trips.map((trip, i) => (
-                <th key={`${trip?.name || 'trip'}-${i}`}>{sheet.route}</th>
+              <th aria-hidden="true" />
+              {sheet.trips.map((trip, i) => (
+                <th key={`${trip?.tripItemId || trip?.name || 'trip'}-${i}`}>
+                  <span className="ttSheet__badge">{tripRoutes(trip, sheet.routeGroup)}</span>
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className={row.type === 'break' ? 'is-break' : undefined}>
-                <th scope="row">
-                  {row.type === 'break' ? t('timetables.stopRow') : row.label}
-                </th>
-                {row.cells.map((ev, i) => (
-                  <td key={i}>
-                    {!ev
-                      ? '--'
-                      : ev.type === 'break'
-                      ? `${ev.duration} min`
-                      : ev.time || '--'}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {rows.map((row) =>
+              row.type === 'break' ? (
+                <tr key={row.key} className="is-break">
+                  <th scope="row">
+                    <IconCoffee size={16} stroke={1.75} aria-hidden="true" /> {t('timetables.stopRow')}
+                  </th>
+                  {row.cells.map((ev, i) => (
+                    <td key={i}>{ev ? breakLength(ev.duration) : '--'}</td>
+                  ))}
+                </tr>
+              ) : (
+                <tr key={row.key} className={row.terminal ? 'is-terminal' : undefined}>
+                  <th scope="row">{row.label}</th>
+                  {row.cells.map((ev, i) => (
+                    <td key={i}>{ev?.time || '--'}</td>
+                  ))}
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       )}
-
-      <footer className="ttSheet__foot">
-        <span>{titleCase(sheet.season)}</span>
-      </footer>
     </article>
   );
 }
 
-export default function Timetables({ shifts = [], workspaceId }) {
+// ---------------------------------------------------------------------------
+// Season list
+// ---------------------------------------------------------------------------
+
+function SeasonList({ seasons }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
 
-  const sheets = useMemo(() => buildSheets(shifts, workspaceId), [shifts, workspaceId]);
+  if (seasons.length === 0) return <p className="ttEmpty">{t('timetables.empty')}</p>;
+  return (
+    <div className="ttSeasons">
+      {seasons.map((season) => (
+        <section key={season.id} className="ttSeasonCard">
+          <span className={`ttTag${season.active ? ' ttTag--active' : ''}`}>
+            {season.active ? t('timetables.active') : t('timetables.inactive')}
+          </span>
+          <h2 className="ttSeasonCard__title">{seasonTitle(season, t)}</h2>
+          <Duration season={season} />
+          <button type="button" className="ttButton" onClick={() => navigate(`/timetables/${encodeURIComponent(season.id)}`)}>
+            {t('timetables.open')}
+          </button>
+        </section>
+      ))}
+    </div>
+  );
+}
 
-  const seasons = useMemo(() => {
-    const set = new Set(sheets.map((s) => s.season).filter(Boolean));
-    return Array.from(set).sort();
-  }, [sheets]);
+// ---------------------------------------------------------------------------
+// One season: route filter, route accordions, sheet selection, print
+// ---------------------------------------------------------------------------
 
-  const [season, setSeason] = useState('');
-  const activeSeason = season || seasons[0] || '';
-
+function SeasonView({ season }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState(() => new Set());
+  const [openRoutes, setOpenRoutes] = useState(() => new Set());
+  const [pinnedGroup, setPinnedGroup] = useState('');
 
-  const visible = useMemo(
-    () => sheets.filter((s) => (activeSeason ? s.season === activeSeason : true)),
-    [sheets, activeSeason]
+  const routes = useMemo(() => {
+    const byRoute = new Map();
+    for (const sheet of season.sheets) {
+      const list = byRoute.get(sheet.route) || [];
+      list.push(sheet);
+      byRoute.set(sheet.route, list);
+    }
+    return Array.from(byRoute, ([route, sheets]) => ({
+      route,
+      group: sheets[0].routeGroup,
+      sheets,
+      days: DAY_ORDER.filter((d) => sheets.some((s) => s.days.includes(d))),
+    }));
+  }, [season.sheets]);
+
+  const groups = useMemo(() => Array.from(new Set(routes.map((r) => r.group))), [routes]);
+
+  // The chosen route number is pulled to the top; the rest keep their order.
+  const ordered = useMemo(
+    () => (pinnedGroup ? [...routes.filter((r) => r.group === pinnedGroup), ...routes.filter((r) => r.group !== pinnedGroup)] : routes),
+    [routes, pinnedGroup]
   );
 
-  const weekParts = useMemo(() => {
-    const set = new Set(visible.map((s) => s.weekPart || '').filter(Boolean));
-    return Array.from(set).sort();
-  }, [visible]);
-
-  const toggle = (keys, on) => {
+  const toggleSheets = (keys, on) =>
     setSelected((prev) => {
       const next = new Set(prev);
       for (const k of keys) {
@@ -199,110 +297,144 @@ export default function Timetables({ shifts = [], workspaceId }) {
       }
       return next;
     });
-  };
 
-  const allKeys = visible.map((s) => s.key);
-  const allChecked = allKeys.length > 0 && allKeys.every((k) => selected.has(k));
-  const someChecked = allKeys.some((k) => selected.has(k)) && !allChecked;
+  const toggleOpen = (route) =>
+    setOpenRoutes((prev) => {
+      const next = new Set(prev);
+      if (next.has(route)) next.delete(route);
+      else next.add(route);
+      return next;
+    });
 
-  const selectedSheets = sheets.filter((s) => selected.has(s.key));
+  // Print sends every ticked sheet, across all routes, in page order.
+  const toPrint = season.sheets.filter((s) => selected.has(s.key));
 
   return (
-    <div className="ttPage">
+    <>
       <div className="ttBrowse">
-        <div className="ttBreadcrumbs">
-          <Link to="/" className="ttBreadcrumbs__link">{t('drivers.breadcrumbs.home')}</Link>
-          <span className="ttBreadcrumbs__sep">/</span>
-          <span>{t('timetables.title')}</span>
-        </div>
+        <Breadcrumbs items={[{ label: t('timetables.title'), to: '/timetables' }, { label: seasonCrumb(season, t) }]} />
+        <h1 className="ttTitle">{seasonTitle(season, t)}</h1>
+        <Duration season={season} />
 
-        <Title order={2} className="ttTitle">{t('timetables.title')}</Title>
-
-        {seasons.length > 0 && (
-          <SegmentedControl
-            value={activeSeason}
-            onChange={setSeason}
-            data={seasons.map((s) => ({ value: s, label: titleCase(s) }))}
-            className="ttSeason"
-          />
+        {groups.length > 1 && (
+          <div className="ttFilters" role="group" aria-label={t('timetables.filterRoutes')}>
+            {groups.map((g) => (
+              <button
+                key={g}
+                type="button"
+                className={`ttFilter${pinnedGroup === g ? ' is-on' : ''}`}
+                aria-pressed={pinnedGroup === g}
+                onClick={() => setPinnedGroup((cur) => (cur === g ? '' : g))}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
         )}
 
-        <Group className="ttBulk">
-          <Checkbox
-            label={t('timetables.selectAll')}
-            checked={allChecked}
-            indeterminate={someChecked}
-            onChange={(e) => toggle(allKeys, e.target.checked)}
-          />
-          <Button onClick={() => window.print()} disabled={selectedSheets.length === 0}>
-            {t('timetables.print')} ({selectedSheets.length})
-          </Button>
-        </Group>
+        {ordered.length === 0 && <p className="ttEmpty">{t('timetables.noSheets')}</p>}
 
-        {visible.length === 0 && <p className="ttEmpty">{t('timetables.empty')}</p>}
-
-        <Accordion multiple defaultValue={weekParts}>
-          {weekParts.map((wp) => {
-            const inPart = visible.filter((s) => s.weekPart === wp);
-            const routes = Array.from(new Set(inPart.map((s) => s.route))).sort(compareRoutes);
-
+        <div className="ttRoutes">
+          {ordered.map((r) => {
+            const open = openRoutes.has(r.route);
+            const keys = r.sheets.map((s) => s.key);
+            const all = keys.every((k) => selected.has(k));
+            const some = !all && keys.some((k) => selected.has(k));
+            const panelId = `tt-route-${r.route}`;
             return (
-              <Accordion.Item key={wp} value={wp}>
-                <Accordion.Control>
-                  <strong>{titleCase(wp)}</strong>
-                  <span className="ttCount">{inPart.length}</span>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  {routes.map((route) => {
-                    const forRoute = inPart.filter((s) => s.route === route);
-                    const routeKeys = forRoute.map((s) => s.key);
-                    const routeAll = routeKeys.every((k) => selected.has(k));
-                    const routeSome = routeKeys.some((k) => selected.has(k)) && !routeAll;
+              <section key={r.route} className={`ttRoute${open ? ' is-open' : ''}`}>
+                <button
+                  type="button"
+                  className="ttRoute__head"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  onClick={() => toggleOpen(r.route)}
+                >
+                  <span>
+                    <span className="ttRoute__name">{r.route}</span>
+                    <DayChips days={r.days} />
+                  </span>
+                  <span className="ttRoute__chevron" aria-hidden="true">
+                    {open ? <IconChevronUp size={22} stroke={1.5} /> : <IconChevronDown size={22} stroke={1.5} />}
+                  </span>
+                </button>
 
-                    return (
-                      <div key={route} className="ttRouteGroup">
-                        <Checkbox
-                          className="ttRouteGroup__head"
-                          label={<strong>{route}</strong>}
-                          checked={routeAll}
-                          indeterminate={routeSome}
-                          onChange={(e) => toggle(routeKeys, e.target.checked)}
-                        />
-                        <div className="ttRouteGroup__items">
-                          {forRoute.map((s) => (
-                            <Checkbox
-                              key={s.key}
-                              label={`${titleCase(s.shiftType)}${s.time ? ` · ${s.time}` : ''}`}
-                              checked={selected.has(s.key)}
-                              onChange={(e) => toggle([s.key], e.target.checked)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </Accordion.Panel>
-              </Accordion.Item>
+                {open && (
+                  <div className="ttRoute__body" id={panelId}>
+                    <div className="ttRoute__bar">
+                      <Checkbox
+                        aria-label={t('timetables.selectAllInRoute', { route: r.route })}
+                        checked={all}
+                        indeterminate={some}
+                        onChange={(e) => toggleSheets(keys, e.currentTarget.checked)}
+                      />
+                      <button type="button" className="ttButton ttButton--print" onClick={() => window.print()} disabled={toPrint.length === 0}>
+                        <IconPrinter size={20} stroke={1.75} aria-hidden="true" />
+                        {toPrint.length > 0 ? t('timetables.printCount', { count: toPrint.length }) : t('timetables.print')}
+                      </button>
+                    </div>
+                    <ul className="ttSheets">
+                      {r.sheets.map((s) => (
+                        <li key={s.key} className="ttSheetRow">
+                          <Checkbox
+                            checked={selected.has(s.key)}
+                            onChange={(e) => toggleSheets([s.key], e.currentTarget.checked)}
+                            label={
+                              <span className="ttSheetRow__label">
+                                <span className="ttSheetRow__name">
+                                  {r.route} {shiftTypeLabel(s.shiftType, t)}
+                                </span>
+                                <DayChips days={s.days} />
+                              </span>
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
             );
           })}
-        </Accordion>
-
-        {selectedSheets.length > 0 && (
-          <section className="ttPreview">
-            <h3 className="ttPreview__title">{t('timetables.preview')}</h3>
-            {selectedSheets.map((s) => (
-              <Sheet key={s.key} sheet={s} />
-            ))}
-          </section>
-        )}
+        </div>
       </div>
 
-      {/* Only this block is sent to the printer. */}
+      {/* Only this block is sent to the printer: one A4 page per ticked sheet. */}
       <div className="ttPrintArea">
-        {selectedSheets.map((s) => (
+        {toPrint.map((s) => (
           <Sheet key={s.key} sheet={s} />
         ))}
       </div>
+    </>
+  );
+}
+
+export default function Timetables({ workspaceId }) {
+  const { t } = useI18n();
+  const { seasonId } = useParams();
+  const { status, seasons } = useTimetables(workspaceId);
+  const season = seasonId ? seasons.find((s) => s.id === decodeURIComponent(seasonId)) : null;
+
+  let body;
+  if (status === 'loading') body = <p className="ttEmpty">{t('timetables.loading')}</p>;
+  else if (status === 'error') body = <p className="ttEmpty">{t('timetables.loadFailed')}</p>;
+  else if (seasonId && !season) body = <p className="ttEmpty">{t('timetables.seasonNotFound')}</p>;
+
+  if (body || !seasonId) {
+    return (
+      <div className="ttPage">
+        <div className="ttBrowse">
+          <Breadcrumbs items={seasonId ? [{ label: t('timetables.title'), to: '/timetables' }] : [{ label: t('timetables.title') }]} />
+          <h1 className="ttTitle">{t('timetables.title')}</h1>
+          {body || <SeasonList seasons={seasons} />}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ttPage">
+      <SeasonView key={season.id} season={season} />
     </div>
   );
 }

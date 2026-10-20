@@ -155,6 +155,75 @@ function clockStatus(from, to) {
   return byShiftId;
 }
 
+// ---- Timetables: stops and times from the printed 51A sample ----
+const LEG_51_OUT = [['Selfoss/N1', 0], ['Selfoss/FSU', 2], ['Selfoss/Ráðhusið', 4], ['Hveragerði', 17], ['Helluvað', 47], ['Mjódd E', 54]];
+const LEG_51_BACK = [['Mjódd E', 0], ['Helluvað', 7], ['Hveragerði', 37], ['Selfoss/Ráðhusið', 49], ['Selfoss/FSU', 51], ['Selfoss/N1', 54]];
+const LEG_52_OUT = [['Selfoss/N1', 0], ['Hella', 30], ['Hvolsvöllur', 45], ['Landeyjahöfn', 70]];
+const LEG_52_BACK = [['Landeyjahöfn', 0], ['Hvolsvöllur', 25], ['Hella', 40], ['Selfoss/N1', 70]];
+
+function hhmm(min) {
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+// One column on the sheet: out, a break at the far end, and back.
+function sampleTrip(start, out, back, breakMin, route, backRoute = route, skip = '') {
+  const s = toMin(start);
+  const events = out
+    .filter(([label]) => label !== skip)
+    .map(([label, off]) => ({ type: 'stop', label, time: hhmm(s + off), route }));
+  const arrive = s + out[out.length - 1][1];
+  events.push({ type: 'break', duration: breakMin });
+  const leave = arrive + breakMin;
+  for (const [label, off] of back) {
+    if (label !== skip) events.push({ type: 'stop', label, time: hhmm(leave + off), route: backRoute });
+  }
+  return { name: `${route} ${start}`, time: `${start}–${hhmm(leave + back[back.length - 1][1])}`, events };
+}
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+const WEEKEND_DAYS = ['sat', 'sun'];
+
+function sampleSheets(season) {
+  const sheet = (route, shiftType, days, routeName, trips) => ({
+    key: `${season}|${route}|${shiftType}|${days.join('')}`,
+    route,
+    routeGroup: route.match(/^\d+/)[0],
+    routeName,
+    shiftType,
+    weekPart: days === WEEKEND_DAYS ? 'weekend' : 'weekdays',
+    days,
+    trips,
+  });
+  const n51 = 'Selfoss N1 ⇋ Mjódd E';
+  const late = season === 'summer' ? 15 : 0;
+  return [
+    sheet('51-A', 'morning', WEEKDAYS, n51, [sampleTrip(hhmm(385 + late), LEG_51_OUT, LEG_51_BACK, 36, '51'), sampleTrip(hhmm(550 + late), LEG_51_OUT, LEG_51_BACK, 96, '51')]),
+    sheet('51-A', 'evening', WEEKDAYS, n51, [sampleTrip('14:10', LEG_51_OUT, LEG_51_BACK, 30, '51'), sampleTrip('16:40', LEG_51_OUT, LEG_51_BACK, 45, '51'), sampleTrip('19:20', LEG_51_OUT, LEG_51_BACK, 25, '51')]),
+    sheet('51-A', 'morning', WEEKEND_DAYS, n51, [sampleTrip('08:25', LEG_51_OUT, LEG_51_BACK, 40, '51')]),
+    sheet('51-A', 'evening', WEEKEND_DAYS, n51, [sampleTrip('15:25', LEG_51_OUT, LEG_51_BACK, 40, '51')]),
+    // Second trip switches to route 73 on the way back.
+    sheet('51-B', 'morning', WEEKDAYS, n51, [sampleTrip('06:55', LEG_51_OUT, LEG_51_BACK, 30, '51'), sampleTrip('09:40', LEG_51_OUT, LEG_51_BACK, 50, '51', '73')]),
+    sheet('51-B', 'evening', WEEKDAYS, n51, [sampleTrip('15:05', LEG_51_OUT, LEG_51_BACK, 35, '51')]),
+    sheet('51-C', 'single', [...WEEKDAYS, ...WEEKEND_DAYS], n51, [sampleTrip('11:15', LEG_51_OUT, LEG_51_BACK, 30, '51')]),
+    // The 12:30 trip does not serve Hvolsvöllur: shows "--".
+    sheet('52-A', 'morning', WEEKDAYS, 'Selfoss N1 ⇋ Landeyjahöfn', [sampleTrip('07:30', LEG_52_OUT, LEG_52_BACK, 45, '52'), sampleTrip('12:30', LEG_52_OUT, LEG_52_BACK, 60, '52', '52', 'Hvolsvöllur')]),
+    sheet('52-A', 'evening', [...WEEKDAYS, ...WEEKEND_DAYS], 'Selfoss N1 ⇋ Landeyjahöfn', [sampleTrip('16:30', LEG_52_OUT, LEG_52_BACK, 45, '52')]),
+    sheet('72', 'morning', WEEKDAYS, 'Selfoss N1 ⇋ Flúðir', [sampleTrip('07:00', [['Selfoss/N1', 0], ['Reykholt', 40], ['Flúðir', 55]], [['Flúðir', 0], ['Reykholt', 15], ['Selfoss/N1', 55]], 20, '72')]),
+    sheet('73', 'evening', WEEKDAYS, 'Selfoss N1 ⇋ Þorlákshöfn', [sampleTrip('17:10', [['Selfoss/N1', 0], ['Þorlákshöfn', 25]], [['Þorlákshöfn', 0], ['Selfoss/N1', 25]], 15, '73')]),
+  ];
+}
+
+function sampleTimetables() {
+  const t = today();
+  const winter = { from: '2026-08-24', to: '2027-06-15' };
+  const summer = { from: '2026-06-15', to: '2026-08-23' };
+  return [
+    { id: 'winter', name: 'Winter', ...winter, active: winter.from <= t && t <= winter.to, sheets: sampleSheets('winter') },
+    { id: 'summer', name: 'Summer', ...summer, active: summer.from <= t && t <= summer.to, sheets: sampleSheets('summer') },
+  ];
+}
+
 export async function sampleResponse(url, init) {
   const u = new URL(String(url), 'http://sample.local');
   const method = String(init?.method || 'GET').toUpperCase();
@@ -169,6 +238,8 @@ export async function sampleResponse(url, init) {
       return { ok: true, shifts: q('month') ? buildMonth(q('month')) : [] };
     case '/api/timon/clock-status':
       return { ok: true, byShiftId: clockStatus(q('from') || q('date') || today(), q('to') || q('date') || today()) };
+    case '/api/timetables':
+      return { ok: true, seasons: sampleTimetables() };
     case '/api/workspaces':
       return { ok: true, workspaces: [{ id: WORKSPACE, name: 'South Iceland (sample)' }] };
     case '/api/drivers':

@@ -1,211 +1,454 @@
+/* ===== Timetables: season list, season page, printed sheets ===== */
+
 .ttPage {
-  padding: 16px;
-  max-width: 1100px;
-  margin: 0 auto;
+  padding: 40px 80px 64px;
+  max-width: 1140px;
+  color: #151922;
+  background: #fff;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .ttBreadcrumbs {
   font-size: 13px;
-  color: #666;
+  color: #6b7280;
   margin-bottom: 8px;
 }
 .ttBreadcrumbs__link {
   color: #1971c2;
   text-decoration: none;
 }
+.ttBreadcrumbs__link:hover {
+  text-decoration: underline;
+}
 .ttBreadcrumbs__sep {
   margin: 0 6px;
 }
 
 .ttTitle {
-  margin: 0 0 16px 0;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-.ttSeason {
-  margin-bottom: 16px;
-}
-
-.ttBulk {
-  margin-bottom: 16px;
+.ttDuration {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #4b5563;
 }
 
 .ttEmpty {
-  color: #777;
+  margin-top: 24px;
+  color: #6b7280;
   font-size: 14px;
 }
 
-.ttCount {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #868e96;
+/* Buttons */
+.ttButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 6px;
+  background: #151922;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ttButton:hover {
+  background: #2a303c;
+}
+.ttButton:focus-visible {
+  outline: 2px solid #1971c2;
+  outline-offset: 2px;
+}
+.ttButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+.ttButton--print {
+  height: 40px;
+  padding: 0 20px;
 }
 
-.ttRouteGroup {
-  padding: 8px 0;
-  border-bottom: 1px solid #f1f3f5;
-}
-.ttRouteGroup:last-child {
-  border-bottom: none;
-}
-.ttRouteGroup__items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin: 8px 0 0 28px;
+/* ----- Season list ----- */
+.ttSeasons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 24px 44px;
+  margin-top: 60px;
+  max-width: 890px;
 }
 
-.ttPreview {
+.ttSeasonCard {
+  background: #f1f1f3;
+  border-radius: 4px;
+  padding: 24px 20px 20px;
+}
+
+.ttTag {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid #c9ccd1;
+  border-radius: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #151922;
+}
+.ttTag--active {
+  background: #fff200;
+  border-color: #fff200;
+}
+
+.ttSeasonCard__title {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ttSeasonCard .ttButton {
   margin-top: 28px;
 }
-.ttPreview__title {
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #868e96;
-  margin: 0 0 12px 0;
+
+/* ----- Season page ----- */
+.ttFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 15px;
+  margin-top: 48px;
 }
 
-/* ---- the printable sheet, modelled on the existing PDF ---- */
+.ttFilter {
+  min-width: 52px;
+  height: 29px;
+  padding: 0 14px;
+  border: 1px solid #151922;
+  border-radius: 999px;
+  background: #fff;
+  color: #151922;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ttFilter:hover {
+  background: #f1f1f3;
+}
+.ttFilter.is-on {
+  background: #151922;
+  color: #fff;
+}
+.ttFilter:focus-visible {
+  outline: 2px solid #1971c2;
+  outline-offset: 2px;
+}
+
+.ttRoutes {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 48px;
+  max-width: 978px;
+}
+
+.ttRoute {
+  background: #f1f1f3;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+.ttRoute.is-open {
+  background: #fff;
+  border-color: #151922;
+}
+
+.ttRoute__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 20px 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ttRoute.is-open .ttRoute__head {
+  padding: 24px 24px 20px;
+}
+.ttRoute__head:focus-visible {
+  outline: 2px solid #1971c2;
+  outline-offset: -2px;
+}
+
+.ttRoute__name {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ttRoute__chevron {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.ttRoute.is-open .ttRoute__chevron {
+  background: #f6f6f7;
+}
+
+.ttRoute__body {
+  padding: 32px 24px 8px;
+}
+
+.ttRoute__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.ttSheets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ttSheetRow {
+  padding: 14px 0;
+}
+.ttSheetRow + .ttSheetRow {
+  border-top: 1px solid #d1d5db;
+}
+.ttSheetRow .mantine-Checkbox-body {
+  align-items: center;
+}
+.ttSheetRow__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 6px;
+}
+.ttSheetRow__name {
+  font-size: 19px;
+  font-weight: 600;
+  color: #151922;
+}
+
+/* Day chips: weekdays black, weekend teal */
+.ttDays {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ttDay {
+  padding: 0 6px;
+  border: 1px solid #151922;
+  border-radius: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 400;
+  color: #151922;
+}
+.ttDay--weekend {
+  border-color: #0f8a7e;
+  color: #0f8a7e;
+}
+.ttDays--sm {
+  gap: 8px;
+  margin-top: 4px;
+}
+.ttDays--sm .ttDay {
+  font-size: 9px;
+  line-height: 13px;
+  padding: 0 5px;
+  border-color: #6b7280;
+  border-radius: 2px;
+}
+.ttDays--sm .ttDay--weekend {
+  border-color: #0f8a7e;
+}
+
+/* ----- Printed sheet (A4) ----- */
+.ttPrintArea {
+  display: none;
+}
 
 .ttSheet {
-  background: #fff;
-  border: 1px solid #e9ecef;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 24px;
+  font-family: 'Neue Montreal', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: #151922;
 }
 
 .ttSheet__head {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  background: #06211a;
-  color: #fff;
-  padding: 18px 20px;
-}
-.ttSheet__days {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-.ttSheet__name {
-  font-size: 15px;
-  margin-top: 4px;
-  opacity: 0.92;
-}
-.ttSheet__headRight {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
-}
-.ttSheet__type {
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-}
-.ttSheet__route {
-  font-size: 34px;
-  font-weight: 800;
-  line-height: 1;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid #9ca3af;
 }
 
-.ttSheet__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
+.ttSheet__titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.ttSheet__table th,
-.ttSheet__table td {
-  text-align: left;
-  padding: 7px 14px;
-}
-.ttSheet__table thead th {
-  font-size: 12px;
-  color: #fff;
-  background: #06211a;
-  border-radius: 4px;
-}
-.ttSheet__table thead tr th:first-child {
-  background: transparent;
-}
-.ttSheet__table tbody th {
+.ttSheet__route {
+  font-size: 30px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1;
+  color: #0b2a1f;
+  letter-spacing: -0.5px;
 }
-.ttSheet__table tbody td {
-  font-variant-numeric: tabular-nums;
+.ttSheet__icon {
+  color: #f5b400;
+  margin-left: 8px;
 }
-.ttSheet__table tbody tr.is-break {
-  background: #eef7ee;
+.ttSheet__icon--evening {
+  color: #4b5bb5;
 }
-.ttSheet__table tbody tr.is-break th,
-.ttSheet__table tbody tr.is-break td {
-  font-weight: 600;
-  color: #2f6f3e;
+.ttSheet__type {
+  font-size: 16px;
+  letter-spacing: 0.5px;
+}
+.ttSheet__name {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 500;
+  text-align: right;
 }
 
 .ttSheet__empty {
-  padding: 16px 20px;
-  color: #777;
-  font-size: 14px;
+  margin: 24px 0;
+  color: #6b7280;
 }
 
-.ttSheet__foot {
-  padding: 10px 20px 16px;
-  font-size: 12px;
-  color: #868e96;
+.ttSheet__table {
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.ttSheet__table th,
+.ttSheet__table td {
+  padding: 5px 0;
+  text-align: left;
+  font-weight: 400;
+  color: #374151;
+  white-space: nowrap;
+}
+.ttSheet__table tbody th {
+  min-width: 128px;
+  padding-right: 24px;
+}
+.ttSheet__table td,
+.ttSheet__table thead th {
+  width: 108px;
+  text-align: center;
+}
+.ttSheet__table thead th {
+  padding-bottom: 14px;
+}
+.ttSheet__badge {
+  display: inline-block;
+  min-width: 40px;
+  padding: 1px 8px;
+  border-radius: 2px;
+  background: #151922;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ttSheet__table tr.is-terminal th,
+.ttSheet__table tr.is-terminal td {
+  font-weight: 700;
+  color: #151922;
+}
+.ttSheet__table tr.is-break th,
+.ttSheet__table tr.is-break td {
+  background: #e5f0dc;
+  color: #151922;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ttSheet__table tr.is-break th {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+}
+.ttSheet__table tr.is-break td {
+  font-weight: 700;
+  color: #3f6b1f;
+}
+.ttSheet__table tr.is-break + tr th,
+.ttSheet__table tr.is-break + tr td {
+  padding-top: 10px;
 }
 
-/* The print area is a staging block on screen; only it goes to the printer. */
-.ttPrintArea {
-  display: none;
+@page {
+  size: A4 portrait;
+  margin: 14mm 12mm;
 }
 
 @media print {
   .ttBrowse {
     display: none !important;
   }
-  .ttPrintArea {
-    display: block;
-  }
   .ttPage {
     padding: 0;
     max-width: none;
+    min-height: 0;
+  }
+  .ttPrintArea {
+    display: block;
   }
   .ttSheet {
-    border: none;
-    border-radius: 0;
-    margin: 0;
-    page-break-after: always;
     break-after: page;
+    page-break-after: always;
   }
   .ttSheet:last-child {
-    page-break-after: auto;
     break-after: auto;
-  }
-  .ttSheet__head {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .ttSheet__table thead th,
-  .ttSheet__table tbody tr.is-break {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    page-break-after: auto;
   }
 }
 
+/* Phone */
 @media (max-width: 768px) {
-  .ttSheet__head {
-    flex-direction: column;
+  .ttPage {
+    padding: 24px 16px 48px;
   }
-  .ttSheet__table {
-    display: block;
-    overflow-x: auto;
+  .ttSeasons,
+  .ttFilters,
+  .ttRoutes {
+    margin-top: 28px;
+  }
+  .ttRoute__head,
+  .ttRoute.is-open .ttRoute__head {
+    padding: 16px;
+  }
+  .ttRoute__body {
+    padding: 16px 16px 4px;
+  }
+  .ttRoute__name,
+  .ttSeasonCard__title {
+    font-size: 22px;
+  }
+  .ttRoute__chevron {
+    width: 44px;
+    height: 44px;
   }
 }
