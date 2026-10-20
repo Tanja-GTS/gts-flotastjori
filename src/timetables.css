@@ -281,13 +281,19 @@
   border-color: #0f8a7e;
 }
 
-/* ----- Printed sheet (A4) ----- */
+/* ----- Printed sheet (A4) -----
+   Sized to "Print example - exact design.pdf": the page has no browser margin
+   (which also drops the browser's own URL/date lines); the sheet pads itself,
+   so the divider under the header can run edge to edge. Space Grotesk here only. */
 .ttPrintArea {
   display: none;
 }
 
 .ttSheet {
-  font-family: var(--font-sans);
+  --tt-pad-x: 11mm;
+  box-sizing: border-box;
+  padding: 6mm var(--tt-pad-x) 8mm;
+  font-family: var(--font-print);
   color: #151922;
 }
 
@@ -296,38 +302,57 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid #9ca3af;
+  margin: 0 calc(-1 * var(--tt-pad-x));
+  padding: 0 var(--tt-pad-x) 16px;
+  border-bottom: 1px solid #8a8f98;
 }
 
 .ttSheet__titleRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .ttSheet__route {
-  font-size: 30px;
-  font-weight: 600;
+  font-size: 48px;
+  font-weight: 500;
   line-height: 1;
   color: #0b2a1f;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
 }
 .ttSheet__icon {
-  color: #f5b400;
-  margin-left: 8px;
+  color: #fbbf24;
+  margin-left: 22px;
 }
 .ttSheet__icon--evening {
   color: #4b5bb5;
 }
 .ttSheet__type {
-  font-size: 16px;
+  font-size: 20px;
+  font-weight: 400;
   letter-spacing: 0.5px;
 }
 .ttSheet__name {
-  margin-top: 6px;
-  font-size: 20px;
+  margin-top: 14px;
+  font-size: 27px;
   font-weight: 500;
   text-align: right;
+}
+
+.ttSheet .ttDays--sm {
+  gap: 10px;
+  margin-top: 8px;
+}
+.ttSheet .ttDays--sm .ttDay {
+  padding: 0 8px;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #151922;
+}
+.ttSheet .ttDays--sm .ttDay--weekend {
+  border-color: #0f8a7e;
+  color: #0f8a7e;
 }
 
 .ttSheet__empty {
@@ -336,39 +361,42 @@
 }
 
 .ttSheet__table {
-  margin-top: 16px;
+  margin-top: 22px;
   border-collapse: collapse;
-  font-size: 11.5px;
+  font-size: 14px;
 }
 .ttSheet__table th,
 .ttSheet__table td {
-  padding: 5px 0;
+  height: 32px;
+  padding: 0;
   text-align: left;
   font-weight: 400;
-  color: #374151;
+  color: #4b5563;
   white-space: nowrap;
 }
 .ttSheet__table tbody th {
-  min-width: 128px;
-  padding-right: 24px;
+  width: 138px;
+  font-weight: 500;
 }
 .ttSheet__table td,
 .ttSheet__table thead th {
-  width: 108px;
+  width: 143px;
   text-align: center;
 }
 .ttSheet__table thead th {
+  height: 22px;
   padding-bottom: 14px;
 }
 .ttSheet__badge {
   display: inline-block;
-  min-width: 40px;
-  padding: 1px 8px;
+  min-width: 53px;
+  padding: 2px 8px;
   border-radius: 2px;
   background: #151922;
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 17px;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -379,29 +407,42 @@
 }
 .ttSheet__table tr.is-break th,
 .ttSheet__table tr.is-break td {
+  height: 34px;
   background: #e5f0dc;
   color: #151922;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 .ttSheet__table tr.is-break th {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: 8px;
+  padding-left: 12px;
+  font-weight: 400;
+}
+.ttSheet__table tr.is-break th svg {
+  vertical-align: -3px;
+  margin-right: 6px;
 }
 .ttSheet__table tr.is-break td {
+  font-size: 13px;
   font-weight: 700;
-  color: #3f6b1f;
+  color: #4d7c2a;
 }
+/* A little air either side of the break row */
 .ttSheet__table tr.is-break + tr th,
 .ttSheet__table tr.is-break + tr td {
-  padding-top: 10px;
+  height: 40px;
+  vertical-align: bottom;
+  padding-bottom: 6px;
+}
+.ttSheet__table tr:has(+ tr.is-break) th,
+.ttSheet__table tr:has(+ tr.is-break) td {
+  height: 32px;
+  vertical-align: top;
+  padding-top: 8px;
 }
 
 @page {
   size: A4 portrait;
-  margin: 14mm 12mm;
+  margin: 0;
 }
 
 @media print {

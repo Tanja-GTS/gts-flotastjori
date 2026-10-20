@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Checkbox } from '@mantine/core';
-import { IconChevronDown, IconChevronUp, IconCoffee, IconMoon, IconPrinter, IconSun } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronUp, IconCoffee, IconMoonFilled, IconPrinter, IconSunFilled } from '@tabler/icons-react';
 import { fetchTimetables } from './data/backendApi';
 import { useI18n } from './i18n';
 import './timetables.css';
@@ -156,6 +156,21 @@ function tripRoutes(trip, fallback) {
   return routes.length ? routes.join(' / ') : fallback;
 }
 
+// The printed sheets are hidden on screen, so the browser never fetches their
+// font by itself and the first print would fall back to Inter. Load it first.
+const PRINT_FONT_FACES = ['400 14px "Space Grotesk"', '500 14px "Space Grotesk"', '600 14px "Space Grotesk"', '700 14px "Space Grotesk"'];
+
+function loadPrintFont() {
+  if (typeof document === 'undefined' || !document.fonts?.load) return Promise.resolve();
+  return Promise.all(PRINT_FONT_FACES.map((f) => document.fonts.load(f))).catch(() => undefined);
+}
+
+function printSheets() {
+  // Never wait long on a slow network: print in Inter rather than not at all.
+  const timeout = new Promise((resolve) => setTimeout(resolve, 2000));
+  Promise.race([loadPrintFont(), timeout]).then(() => window.print());
+}
+
 function breakLength(minutes) {
   const n = Number(minutes);
   if (!Number.isFinite(n) || n <= 0) return '';
@@ -165,8 +180,8 @@ function breakLength(minutes) {
 }
 
 function ShiftIcon({ type }) {
-  if (type === 'evening') return <IconMoon size={22} stroke={1.75} className="ttSheet__icon ttSheet__icon--evening" aria-hidden="true" />;
-  return <IconSun size={22} stroke={1.75} className="ttSheet__icon" aria-hidden="true" />;
+  if (type === 'evening') return <IconMoonFilled size={24} className="ttSheet__icon ttSheet__icon--evening" aria-hidden="true" />;
+  return <IconSunFilled size={26} className="ttSheet__icon" aria-hidden="true" />;
 }
 
 function Sheet({ sheet }) {
@@ -206,7 +221,7 @@ function Sheet({ sheet }) {
               row.type === 'break' ? (
                 <tr key={row.key} className="is-break">
                   <th scope="row">
-                    <IconCoffee size={16} stroke={1.75} aria-hidden="true" /> {t('timetables.stopRow')}
+                    <IconCoffee size={20} stroke={1.5} aria-hidden="true" />{t('timetables.stopRow')}
                   </th>
                   {row.cells.map((ev, i) => (
                     <td key={i}>{ev ? breakLength(ev.duration) : '--'}</td>
@@ -264,6 +279,10 @@ function SeasonView({ season }) {
   const [selected, setSelected] = useState(() => new Set());
   const [openRoutes, setOpenRoutes] = useState(() => new Set());
   const [pinnedGroup, setPinnedGroup] = useState('');
+
+  useEffect(() => {
+    loadPrintFont();
+  }, []);
 
   const routes = useMemo(() => {
     const byRoute = new Map();
@@ -368,7 +387,7 @@ function SeasonView({ season }) {
                         indeterminate={some}
                         onChange={(e) => toggleSheets(keys, e.currentTarget.checked)}
                       />
-                      <button type="button" className="ttButton ttButton--print" onClick={() => window.print()} disabled={toPrint.length === 0}>
+                      <button type="button" className="ttButton ttButton--print" onClick={printSheets} disabled={toPrint.length === 0}>
                         <IconPrinter size={20} stroke={1.75} aria-hidden="true" />
                         {toPrint.length > 0 ? t('timetables.printCount', { count: toPrint.length }) : t('timetables.print')}
                       </button>
