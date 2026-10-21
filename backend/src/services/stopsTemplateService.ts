@@ -175,7 +175,7 @@ function decodeSharePointEncodedValue(value: string): string {
   return nonNumeric || parts[0] || '';
 }
 
-function parseDurationMinutes(value: unknown): number | undefined {
+export function parseDurationMinutes(value: unknown): number | undefined {
   if (value == null) return undefined;
 
   if (typeof value === 'number') {
@@ -187,28 +187,33 @@ function parseDurationMinutes(value: unknown): number | undefined {
 
   const normalized = raw.replace(',', '.');
 
-  // Plain number ("36", "36.5")
+  // Hours forms come first: the "number with units" fallback below reads only
+  // the first number, which turned "1:36" and "1h 36min" into a 1-minute break.
+
+  // "H:mm" ("1:36" => 96, "0:36" => 36)
+  {
+    const m = normalized.match(/^(\d{1,2})\s*:\s*(\d{2})$/);
+    if (m) return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  // Hours with units, optionally followed by minutes: "1h 36min", "1 h", "1 klst 36 mín", "2 hours"
+  {
+    const m = normalized.match(/^(\d+)\s*(?:h|hr|hrs|hour|hours|klst|klukkustund(?:ir)?)\.?\s*(?:(\d+)\s*(?:m|min|mins|minutes?|mín|mínútur)?\.?)?$/i);
+    if (m) return Number(m[1]) * 60 + (m[2] ? Number(m[2]) : 0);
+  }
+
+  // Plain number of minutes ("36", "36.5")
   {
     const n = Number(normalized);
     if (Number.isFinite(n)) return n;
   }
 
-  // Number with units ("36 min", "36m")
+  // Minutes with units ("36 min", "36m", "36 mín")
   {
     const m = normalized.match(/(\d+(?:\.\d+)?)/);
     if (m) {
       const n = Number(m[1]);
       if (Number.isFinite(n)) return n;
-    }
-  }
-
-  // "HH:mm" or "H:mm" ("0:36" => 36)
-  {
-    const m = normalized.match(/^(\d{1,2})\s*[:.]\s*(\d{2})$/);
-    if (m) {
-      const hh = Number(m[1]);
-      const mm = Number(m[2]);
-      if (Number.isFinite(hh) && Number.isFinite(mm)) return hh * 60 + mm;
     }
   }
 
