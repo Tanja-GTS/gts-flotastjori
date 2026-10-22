@@ -92,18 +92,24 @@ export async function getShifts(req: Request, res: Response) {
         const syncResult = await cacheGetOrSet({
           key: syncKey,
           ttlMs: AUTO_TIMON_SYNC_COOLDOWN_MS,
-          factory: () =>
-            syncTimonShiftAssignments({
+          factory: async () => {
+            const result = await syncTimonShiftAssignments({
               workspaceId,
               fromdate: range.fromdate,
               todate: range.todate,
               dryRun: false,
-            }),
+            });
+            // Drop the saved shift list once, when a sync has actually run and
+            // written to SharePoint. This used to run on every GET while the
+            // (cached) sync result had matches, so for 30 minutes each page
+            // load rebuilt the month from scratch (~8s, several in parallel).
+            if (result.summary.matchedShiftCount > 0 || result.summary.unmatchedCount > 0) {
+              cacheInvalidatePrefix(cacheKey);
+            }
+            return result;
+          },
         });
 
-        if (syncResult.summary.matchedShiftCount > 0 || syncResult.summary.unmatchedCount > 0) {
-          cacheInvalidatePrefix(cacheKey);
-        }
         if (syncResult.warnings.length > 0) {
           console.warn(
             `[shifts] Timon auto-sync warnings for ${workspaceId} ${month}:\n${syncResult.warnings.join('\n')}`
