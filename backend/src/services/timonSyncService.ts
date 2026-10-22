@@ -9,7 +9,6 @@ import {
 } from './shiftInstancesService';
 import { getShiftInstanceExternalFieldNames } from './msListsConfig';
 import { fetchTimonShiftPlans, type ExternalShiftPlan } from './timonService';
-import { optionalEnv } from '../utils/env';
 
 function asString(value: unknown): string {
   if (value == null) return '';
@@ -107,40 +106,135 @@ function shiftIsoMonth(shift: ExternalShiftPlan): string {
   return asString(shift.arr).slice(0, 7);
 }
 
-function scoreCandidate(externalShift: ExternalShiftPlan, localShift: HydratedShiftDto): number {
-  let score = 0;
+// ---------------------------------------------------------------------------
+// Matching Tímon rows to cards
+//
+// A Tímon row may only land on a card for the SAME route: same Tímon shift
+// name, same route/shift name, or same route code. Times never decide the
+// route - many routes share start/end times (51C and 72A mornings do), and
+// "same day + same times" used to be enough to put Wieslaw's 51C shift on 72A.
+// Within a route, times choose between cards (morning vs evening).
+//
+// Every run plans all matches from scratch, best pairs first, so a mistake
+// made by an earlier run is corrected by the next one. A card's previous link
+// only breaks exact ties, to keep things stable.
+// ---------------------------------------------------------------------------
+
+// "51C - Morgun - V" -> "51C", "72-A morgun" -> "72A", "73 - Morgun" -> "73"
+export function timonRouteCode(name: unknown): string {
+  const upper = asString(name).toUpperCase();
+  const lettered = upper.match(/\b(\d{1,3})\s*-?\s*([A-Z])\b/);
+  if (lettered) return `${lettered[1]}${lettered[2]}`;
+  const digits = upper.match(/^\s*(\d{1,3})\b/);
+  return digits ? digits[1] : '';
+}
+
+// How sure we are that this Tímon row and this card are the same route and
+// shift; 0 = different route, never match.
+export function routeIdentityScore(externalShift: ExternalShiftPlan, localShift: HydratedShiftDto): number {
   const externalName = normalizeText(externalShift.name);
-  const localName = normalizeText(localShift.name);
-  const localRoute = normalizeText(localShift.route);
-  const localRouteName = normalizeText(localShift.routeName);
-  const localTimonShiftName = normalizeText(localShift.timonShiftName);
-  const externalRouteCode = normalizeRouteCode(extractExternalRouteCode(externalShift.name));
-  const localRouteCode = normalizeRouteCode(localShift.route);
-  const localTimonRouteCode = normalizeRouteCode(localShift.timonRouteCode);
+  if (!externalName) return 0;
+  const timonShiftName = normalizeText(localShift.timonShiftName);
+  if (timonShiftName && externalName === timonShiftName) return 100;
+  const names = [localShift.name, localShift.route, localShift.routeName].map(normalizeText).filter(Boolean);
+  if (names.includes(externalName)) return 80;
+  const code = normalizeRouteCode(timonRouteCode(externalShift.name));
+  const localCodes = [localShift.timonRouteCode, localShift.route].map(normalizeRouteCode).filter(Boolean);
+  if (code && localCodes.includes(code)) return 60;
+  return 0;
+}
+
+function timeFitScore(externalShift: ExternalShiftPlan, localShift: HydratedShiftDto): number {
   const externalTime = normalizeTimeLabel(buildExternalTimeLabel(externalShift));
   const localTime = normalizeTimeLabel(localShift.time);
-  const externalMinutes = parseTimeRangeToMinutes(externalTime);
-  const localMinutes = parseTimeRangeToMinutes(localTime);
-
-  if (shiftIsoDate(externalShift) === localShift.date) score += 20;
-  if (externalTime && externalTime === localTime) score += 35;
-  else if (externalMinutes && localMinutes) {
-    const startDiff = Math.abs(externalMinutes.start - localMinutes.start);
-    const endDiff = Math.abs(externalMinutes.end - localMinutes.end);
-    if (startDiff <= 10 && endDiff <= 10) score += 30;
-    else if (startDiff <= 30 && endDiff <= 30) score += 18;
-  }
-  if (externalName && localTimonShiftName && externalName === localTimonShiftName) score += 80;
-  if (externalName && localName && externalName === localName) score += 45;
-  if (externalName && localRoute && externalName === localRoute) score += 35;
-  if (externalName && localRouteName && externalName === localRouteName) score += 35;
-  if (externalRouteCode && localTimonRouteCode && externalRouteCode === localTimonRouteCode) score += 60;
-  if (externalRouteCode && localRouteCode && externalRouteCode === localRouteCode) score += 35;
-  if (externalName && localName && (externalName.includes(localName) || localName.includes(externalName))) score += 10;
-  if (externalName && localRoute && (externalName.includes(localRoute) || localRoute.includes(externalName))) score += 8;
-
-  return score;
+  if (externalTime && externalTime === localTime) return 35;
+  const a = parseTimeRangeToMinutes(externalTime);
+  const b = parseTimeRangeToMinutes(localTime);
+  if (!a || !b) return 0;
+  const diff = Math.max(Math.abs(a.start - b.start), Math.abs(a.end - b.end));
+  if (diff <= 10) return 30;
+  if (diff <= 30) return 18;
+  return 0;
 }
+
+function numericOrMax(id: string): number {
+  const n = Number(id);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
+
+export type TimonMatchPlan = Map<string, { instanceId: string; score: number } | { reason: string }>;
+
+export function planTimonMatches(params: {
+  externalShifts: ExternalShiftPlan[];
+  localShifts: HydratedShiftDto[];
+  // Tímon row id -> card it was linked to by an earlier run (tie-breaker only)
+  previousInstanceByExternalId?: Map<string, string>;
+}): TimonMatchPlan {
+  const previous = params.previousInstanceByExternalId ?? new Map<string, string>();
+  const shiftsByDate = new Map<string, HydratedShiftDto[]>();
+  for (const s of params.localShifts) {
+    const list = shiftsByDate.get(s.date) ?? [];
+    list.push(s);
+    shiftsByDate.set(s.date, list);
+  }
+
+  const pairs: Array<{ externalId: string; instanceId: string; score: number; wasLinked: boolean }> = [];
+  const plan: TimonMatchPlan = new Map();
+  for (const externalShift of params.externalShifts) {
+    const externalId = asString(externalShift.id).trim();
+    const sameDay = shiftsByDate.get(shiftIsoDate(externalShift)) ?? [];
+    let candidates = 0;
+    for (const local of sameDay) {
+      const identity = routeIdentityScore(externalShift, local);
+      if (identity === 0) continue;
+      candidates += 1;
+      pairs.push({
+        externalId,
+        instanceId: local.id,
+        score: identity + timeFitScore(externalShift, local),
+        wasLinked: previous.get(externalId) === local.id,
+      });
+    }
+    plan.set(externalId, {
+      reason: sameDay.length === 0
+        ? 'no cards on this date'
+        : candidates === 0
+          ? `no card for route ${timonRouteCode(externalShift.name) || `"${asString(externalShift.name).trim()}"`} on this date`
+          : 'its card was taken by a better match (double-booked in Tímon?)',
+    });
+  }
+
+  // Best pairs first; ties: keep last run's link, then oldest card, then oldest Tímon row.
+  pairs.sort(
+    (a, b) =>
+      b.score - a.score ||
+      Number(b.wasLinked) - Number(a.wasLinked) ||
+      numericOrMax(a.instanceId) - numericOrMax(b.instanceId) ||
+      numericOrMax(a.externalId) - numericOrMax(b.externalId)
+  );
+  const takenCards = new Set<string>();
+  const placedRows = new Set<string>();
+  for (const pair of pairs) {
+    if (takenCards.has(pair.instanceId) || placedRows.has(pair.externalId)) continue;
+    takenCards.add(pair.instanceId);
+    placedRows.add(pair.externalId);
+    plan.set(pair.externalId, { instanceId: pair.instanceId, score: pair.score });
+  }
+  return plan;
+}
+
+type TimonClearedCard = {
+  instanceId: string;
+  date: string;
+  route: string;
+  shiftType: string;
+  previousDriverName: string | null;
+};
+
+// If more than this share of Tímon's assigned rows find no card, the matching
+// itself is suspect (renamed shifts in Tímon, missing patterns...): report, but
+// do not clear any card.
+const MAX_UNMATCHED_SHARE_FOR_CLEANUP = 0.3;
 
 type TimonConflict = {
   date: string;
@@ -169,7 +263,7 @@ type TimonMatchResult = {
   matchedDriverId?: string;
   matchedDriverName?: string;
   score?: number;
-  via: 'external-id' | 'score' | 'unmatched';
+  via: 'route' | 'unmatched';
   action: 'assigned' | 'unassigned' | 'missing-driver' | 'unmatched';
   reason?: string;
 };
@@ -193,9 +287,11 @@ export async function syncTimonShiftAssignments(params: {
     missingDriverCount: number;
     unmatchedCount: number;
     conflictCount: number;
+    clearedCount: number;
   };
   results: TimonMatchResult[];
   conflicts: TimonConflict[];
+  cleared: TimonClearedCard[];
   warnings: string[];
 }> {
   const workspaceId = asString(params.workspaceId || 'south').trim() || 'south';
@@ -232,12 +328,14 @@ export async function syncTimonShiftAssignments(params: {
     ssns: externalShifts.map((shift) => normalizeSsn(shift.ssn)).filter(Boolean),
   });
 
-  const usedInstanceIds = new Set<string>();
   const warnings: string[] = [];
   const results: TimonMatchResult[] = [];
-  const minScore = Math.max(1, Number(optionalEnv('TIMON_MIN_MATCH_SCORE', '55')) || 55);
-  const minMargin = Math.max(0, Number(optionalEnv('TIMON_MIN_MATCH_MARGIN', '8')) || 8);
   const ext = getShiftInstanceExternalFieldNames();
+  const plan = planTimonMatches({
+    externalShifts,
+    localShifts,
+    previousInstanceByExternalId: instanceIdByExternalShiftId,
+  });
 
   // Detect double-bookings: the same shift (name + arr + dep) assigned to 2+ people in Tímon.
   const assignedRowsByGroup = new Map<string, ExternalShiftPlan[]>();
@@ -288,36 +386,11 @@ export async function syncTimonShiftAssignments(params: {
     const matchedDriver = ssn ? driversBySsn.get(ssn) : undefined;
     const unassigned = Boolean(externalShift.unassigned) || !ssn;
 
-    let matchedInstanceId = instanceIdByExternalShiftId.get(externalShiftId);
-    // If the stored external-id points to an instance that is no longer visible
-    // in the UI (e.g. linked to an expired/deleted pattern), fall through to
-    // score-based matching so we write to the instance managers can actually see.
-    if (matchedInstanceId && !hydratedById.has(matchedInstanceId)) {
-      matchedInstanceId = undefined;
-    }
-    let via: TimonMatchResult['via'] = matchedInstanceId ? 'external-id' : 'unmatched';
-    let matchedScore: number | undefined;
-    let reason = '';
-
-    if (!matchedInstanceId) {
-      const candidates = localShifts
-        .filter((shift) => shift.date === date && !usedInstanceIds.has(shift.id))
-        .map((shift) => ({ shift, score: scoreCandidate(externalShift, shift) }))
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) => b.score - a.score);
-
-      const best = candidates[0];
-      const runnerUp = candidates[1];
-      if (best && best.score >= minScore && (!runnerUp || best.score - runnerUp.score >= minMargin)) {
-        matchedInstanceId = best.shift.id;
-        matchedScore = best.score;
-        via = 'score';
-      } else if (best) {
-        reason = `best score ${best.score} below confidence threshold`;
-      } else {
-        reason = 'no candidate shift found on same date';
-      }
-    }
+    const planned = plan.get(externalShiftId);
+    const matchedInstanceId = planned && 'instanceId' in planned ? planned.instanceId : undefined;
+    const matchedScore = planned && 'instanceId' in planned ? planned.score : undefined;
+    const via: TimonMatchResult['via'] = matchedInstanceId ? 'route' : 'unmatched';
+    const reason = planned && 'reason' in planned ? planned.reason : '';
 
     if (!matchedInstanceId) {
       results.push({
@@ -335,7 +408,6 @@ export async function syncTimonShiftAssignments(params: {
       continue;
     }
 
-    usedInstanceIds.add(matchedInstanceId);
     const hydrated = hydratedById.get(matchedInstanceId);
     const raw = rawById.get(matchedInstanceId);
     const matchedDriverId = matchedDriver?.id;
@@ -392,6 +464,14 @@ export async function syncTimonShiftAssignments(params: {
       }
     }
 
+    if (hydrated && action === 'assigned' && hydrated.driverId !== matchedDriverId) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[timon-sync] ${date} "${asString(externalShift.name).trim()}" ${asString(externalShift.ssn_name).trim()} -> ` +
+          `${hydrated.route} ${hydrated.shiftType} (card ${matchedInstanceId}, was ${hydrated.driverName || 'empty'})${dryRun ? ' [test run]' : ''}`
+      );
+    }
+
     if (action === 'missing-driver') {
       warnings.push(
         `Matched shift ${matchedInstanceId} for external shift ${externalShiftId}, but no local driver matched SSN ${ssn || 'n/a'}.`
@@ -423,6 +503,67 @@ export async function syncTimonShiftAssignments(params: {
     });
   }
 
+  // Clean-up: a card filled from Tímon that no Tímon row matches any more loses
+  // its driver, so a wrong match (or a shift Tímon dropped) never lingers.
+  // Only on dates Tímon actually returned rows for, and only when matching
+  // looks healthy - an outage or a mass rename must never wipe the schedule.
+  const cleared: TimonClearedCard[] = [];
+  const matchedIds = new Set(results.map((r) => r.matchedInstanceId).filter((id): id is string => Boolean(id)));
+  const datesFromTimon = new Set(externalShifts.map(shiftIsoDate).filter(Boolean));
+  const assignedRows = results.filter((r) => !r.unassigned);
+  const unmatchedAssigned = assignedRows.filter((r) => r.action === 'unmatched');
+  for (const r of unmatchedAssigned) {
+    warnings.push(`Not placed: ${r.date} "${r.externalName}" (${r.ssnName || 'no name'}) - ${r.reason || 'no matching card'}`);
+  }
+  const unmatchedShare = assignedRows.length ? unmatchedAssigned.length / assignedRows.length : 0;
+  const partialRun = Boolean(params.ssns || params.groups || (params.shifts && params.shifts.length > 0));
+  if (partialRun) {
+    // Only some people's rows were fetched: every other card would look unmatched.
+  } else if (assignedRows.length === 0 || unmatchedShare > MAX_UNMATCHED_SHARE_FOR_CLEANUP) {
+    warnings.push(
+      `Clean-up skipped: ${unmatchedAssigned.length} of ${assignedRows.length} assigned Tímon shifts found no card. ` +
+        'Check shift names in Tímon against the patterns before trusting this run.'
+    );
+  } else {
+    for (const card of localShifts) {
+      if (!card.driverId || matchedIds.has(card.id) || !datesFromTimon.has(card.date)) continue;
+      const raw = rawById.get(card.id);
+      if (asString(raw?.externalSource).trim().toLowerCase() !== 'timon') continue;
+      cleared.push({
+        instanceId: card.id,
+        date: card.date,
+        route: card.route,
+        shiftType: card.shiftType,
+        previousDriverName: card.driverName || null,
+      });
+      // eslint-disable-next-line no-console
+      console.log(
+        `[timon-sync] ${card.date} ${card.route} ${card.shiftType} (card ${card.id}): removing ${card.driverName || 'driver'} - no Tímon shift matches this card${dryRun ? ' [test run]' : ''}`
+      );
+      if (dryRun) continue;
+      await assignDriverToShiftInstance({ itemId: card.id, driverId: null });
+      try {
+        await setShiftInstanceConfirmationStatus({ itemId: card.id, status: 'unassigned' });
+      } catch {
+        // ignore confirmation status write failures for sync
+      }
+      try {
+        await patchShiftInstanceFields({
+          itemId: card.id,
+          fields: {
+            [ext.externalShiftId]: null,
+            [ext.externalEmployeeSsn]: null,
+            [ext.externalEmployeeName]: null,
+            [ext.externalConflict]: null,
+            [ext.lastSyncedAt]: new Date().toISOString(),
+          },
+        });
+      } catch (err) {
+        warnings.push(`Cleared driver on ${card.id} but failed to clear its Tímon link: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   for (const conflict of conflicts) {
     const who = conflict.drivers.map((d) => d.name || d.ssn).join(' & ');
     warnings.push(
@@ -442,9 +583,11 @@ export async function syncTimonShiftAssignments(params: {
       missingDriverCount: results.filter((result) => result.action === 'missing-driver').length,
       unmatchedCount: results.filter((result) => result.action === 'unmatched').length,
       conflictCount: conflicts.length,
+      clearedCount: cleared.length,
     },
     results,
     conflicts,
+    cleared,
     warnings,
   };
 }
