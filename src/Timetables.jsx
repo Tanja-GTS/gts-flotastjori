@@ -278,7 +278,8 @@ function SeasonView({ season }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState(() => new Set());
   const [openRoutes, setOpenRoutes] = useState(() => new Set());
-  const [pinnedGroup, setPinnedGroup] = useState('');
+  // Route filter: picked routes are shown first; the rest stay available below.
+  const [pickedRoutes, setPickedRoutes] = useState(() => new Set());
 
   useEffect(() => {
     loadPrintFont();
@@ -299,13 +300,16 @@ function SeasonView({ season }) {
     }));
   }, [season.sheets]);
 
-  const groups = useMemo(() => Array.from(new Set(routes.map((r) => r.group))), [routes]);
+  const picked = routes.filter((r) => pickedRoutes.has(r.route));
+  const rest = pickedRoutes.size ? routes.filter((r) => !pickedRoutes.has(r.route)) : routes;
 
-  // The chosen route number is pulled to the top; the rest keep their order.
-  const ordered = useMemo(
-    () => (pinnedGroup ? [...routes.filter((r) => r.group === pinnedGroup), ...routes.filter((r) => r.group !== pinnedGroup)] : routes),
-    [routes, pinnedGroup]
-  );
+  const togglePicked = (route) =>
+    setPickedRoutes((prev) => {
+      const next = new Set(prev);
+      if (next.has(route)) next.delete(route);
+      else next.add(route);
+      return next;
+    });
 
   const toggleSheets = (keys, on) =>
     setSelected((prev) => {
@@ -325,7 +329,70 @@ function SeasonView({ season }) {
       return next;
     });
 
-  // Print sends every ticked sheet, across all routes, in page order.
+  const renderRoute = (r) => {
+    const open = openRoutes.has(r.route);
+    const keys = r.sheets.map((s) => s.key);
+    const all = keys.every((k) => selected.has(k));
+    const some = !all && keys.some((k) => selected.has(k));
+    const panelId = `tt-route-${r.route}`;
+    return (
+      <section key={r.route} className={`ttRoute${open ? ' is-open' : ''}`}>
+        <button
+          type="button"
+          className="ttRoute__head"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => toggleOpen(r.route)}
+        >
+          <span>
+            <span className="ttRoute__name">{r.route}</span>
+            <DayChips days={r.days} />
+          </span>
+          <span className="ttRoute__chevron" aria-hidden="true">
+            {open ? <IconChevronUp size={22} stroke={1.5} /> : <IconChevronDown size={22} stroke={1.5} />}
+          </span>
+        </button>
+
+        {open && (
+          <div className="ttRoute__body" id={panelId}>
+            <div className="ttRoute__bar">
+              <Checkbox
+                aria-label={t('timetables.selectAllInRoute', { route: r.route })}
+                checked={all}
+                indeterminate={some}
+                onChange={(e) => toggleSheets(keys, e.currentTarget.checked)}
+              />
+              <button type="button" className="ttButton ttButton--print" onClick={printSheets} disabled={toPrint.length === 0}>
+                <IconPrinter size={20} stroke={1.75} aria-hidden="true" />
+                {toPrint.length > 0 ? t('timetables.printCount', { count: toPrint.length }) : t('timetables.print')}
+              </button>
+            </div>
+            <ul className="ttSheets">
+              {r.sheets.map((s) => (
+                <li key={s.key} className="ttSheetRow">
+                  <Checkbox
+                    checked={selected.has(s.key)}
+                    onChange={(e) => toggleSheets([s.key], e.currentTarget.checked)}
+                    label={
+                      <span className="ttSheetRow__label">
+                        <span className="ttSheetRow__name">
+                          {r.route} {shiftTypeLabel(s.shiftType, t)}
+                        </span>
+                        <DayChips days={s.days} />
+                      </span>
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  // Print sends every ticked sheet, across all routes, in page order, also
+  // sheets in routes the filter has moved down (less annoying than re-finding them).
   const toPrint = season.sheets.filter((s) => selected.has(s.key));
 
   return (
@@ -335,87 +402,28 @@ function SeasonView({ season }) {
         <h1 className="ttTitle">{seasonTitle(season, t)}</h1>
         <Duration season={season} />
 
-        {groups.length > 1 && (
+        {routes.length > 1 && (
           <div className="ttFilters" role="group" aria-label={t('timetables.filterRoutes')}>
-            {groups.map((g) => (
+            {routes.map((r) => (
               <button
-                key={g}
+                key={r.route}
                 type="button"
-                className={`ttFilter${pinnedGroup === g ? ' is-on' : ''}`}
-                aria-pressed={pinnedGroup === g}
-                onClick={() => setPinnedGroup((cur) => (cur === g ? '' : g))}
+                className={`ttFilter${pickedRoutes.has(r.route) ? ' is-on' : ''}`}
+                aria-pressed={pickedRoutes.has(r.route)}
+                onClick={() => togglePicked(r.route)}
               >
-                {g}
+                {r.route}
               </button>
             ))}
           </div>
         )}
 
-        {ordered.length === 0 && <p className="ttEmpty">{t('timetables.noSheets')}</p>}
+        {routes.length === 0 && <p className="ttEmpty">{t('timetables.noSheets')}</p>}
 
-        <div className="ttRoutes">
-          {ordered.map((r) => {
-            const open = openRoutes.has(r.route);
-            const keys = r.sheets.map((s) => s.key);
-            const all = keys.every((k) => selected.has(k));
-            const some = !all && keys.some((k) => selected.has(k));
-            const panelId = `tt-route-${r.route}`;
-            return (
-              <section key={r.route} className={`ttRoute${open ? ' is-open' : ''}`}>
-                <button
-                  type="button"
-                  className="ttRoute__head"
-                  aria-expanded={open}
-                  aria-controls={panelId}
-                  onClick={() => toggleOpen(r.route)}
-                >
-                  <span>
-                    <span className="ttRoute__name">{r.route}</span>
-                    <DayChips days={r.days} />
-                  </span>
-                  <span className="ttRoute__chevron" aria-hidden="true">
-                    {open ? <IconChevronUp size={22} stroke={1.5} /> : <IconChevronDown size={22} stroke={1.5} />}
-                  </span>
-                </button>
-
-                {open && (
-                  <div className="ttRoute__body" id={panelId}>
-                    <div className="ttRoute__bar">
-                      <Checkbox
-                        aria-label={t('timetables.selectAllInRoute', { route: r.route })}
-                        checked={all}
-                        indeterminate={some}
-                        onChange={(e) => toggleSheets(keys, e.currentTarget.checked)}
-                      />
-                      <button type="button" className="ttButton ttButton--print" onClick={printSheets} disabled={toPrint.length === 0}>
-                        <IconPrinter size={20} stroke={1.75} aria-hidden="true" />
-                        {toPrint.length > 0 ? t('timetables.printCount', { count: toPrint.length }) : t('timetables.print')}
-                      </button>
-                    </div>
-                    <ul className="ttSheets">
-                      {r.sheets.map((s) => (
-                        <li key={s.key} className="ttSheetRow">
-                          <Checkbox
-                            checked={selected.has(s.key)}
-                            onChange={(e) => toggleSheets([s.key], e.currentTarget.checked)}
-                            label={
-                              <span className="ttSheetRow__label">
-                                <span className="ttSheetRow__name">
-                                  {r.route} {shiftTypeLabel(s.shiftType, t)}
-                                </span>
-                                <DayChips days={s.days} />
-                              </span>
-                            }
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
+        {picked.length > 0 && <div className="ttRoutes">{picked.map(renderRoute)}</div>}
+        {rest.length > 0 && (
+          <div className={`ttRoutes${picked.length > 0 ? ' ttRoutes--rest' : ''}`}>{rest.map(renderRoute)}</div>
+        )}
       </div>
 
       {/* Only this block is sent to the printer: one A4 page per ticked sheet. */}
