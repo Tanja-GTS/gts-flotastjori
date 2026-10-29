@@ -451,6 +451,32 @@ function toTripDto(item: { id: string; fields: Record<string, unknown> }): TripD
   };
 }
 
+/**
+ * Give each trip its own stops (looked up by its own TripsTemplates id) and a
+ * readable bus. Stops used to be paired by position against a time-sorted
+ * copy while titles kept SharePoint's link order, so when a template listed
+ * its trips out of time order, a trip's title sat on another trip's stops
+ * (51C Thursday: "Trip03 (15:55-17:59)" over the 07:15 trip).
+ */
+export function attachStopsToTrips(
+  trips: TripDto[],
+  stopsByTripId: Map<string, unknown[]>,
+  busTitles: Map<string, string>
+): TripDto[] {
+  return trips.map((t) => {
+    const tripId = asString(t.tripItemId).trim();
+    const stops = tripId ? stopsByTripId.get(tripId) || [] : [];
+    const override = asString(t.busOverride).trim();
+    const resolvedOverride = /^\d+$/.test(override) ? busTitles.get(override) || override : override || null;
+    const baseEvents = Array.isArray(t.events) ? (t.events as Array<Record<string, unknown>>) : [];
+    return {
+      ...t,
+      busOverride: resolvedOverride,
+      events: baseEvents.length > 0 ? baseEvents : (stops as Array<Record<string, unknown>>),
+    };
+  });
+}
+
 export async function getTripsForTemplateIds(params: {
   templateIds: string[];
 }): Promise<Map<string, TripDto[]>> {
@@ -493,6 +519,8 @@ export async function getTripsForTemplateIds(params: {
       .filter((value): value is NonNullable<ReturnType<typeof toTripDto>> => Boolean(value));
 
     if (linkedTrips.length > 0) {
+      // Same order as directly-linked trips: by Order, else start time.
+      linkedTrips.sort((a, b) => a.sortKey - b.sortKey);
       selectedByTemplateId.set(tid, linkedTrips);
       continue;
     }
@@ -536,29 +564,7 @@ export async function getTripsForTemplateIds(params: {
   const busTitles = await resolveBusTitles({ busIds: busOverrideIds });
 
   for (const tid of unique) {
-    const current = out.get(tid) || [];
-    const tripsWithMeta = (selectedByTemplateId.get(tid) || []).filter(Boolean) as Array<NonNullable<ReturnType<typeof toTripDto>>>;
-    const metaSorted = [...tripsWithMeta].sort((a, b) => a.sortKey - b.sortKey);
-
-    const patched = current.map((t, idx) => {
-      const meta = metaSorted[idx];
-      const tripId = meta ? asString(meta.tripItemId).trim() : '';
-      const stops = tripId ? (stopsByTripId.get(tripId) || []) : [];
-
-      const override = asString(t.busOverride).trim();
-      const resolvedOverride = /^\d+$/.test(override) ? (busTitles.get(override) || override) : (override || null);
-
-      const baseEvents = Array.isArray(t.events) ? (t.events as Array<Record<string, unknown>>) : [];
-      const stopEvents = stops as StopEventDto[];
-
-      return {
-        ...t,
-        busOverride: resolvedOverride,
-        events: baseEvents.length > 0 ? baseEvents : (stopEvents as unknown as Array<Record<string, unknown>>),
-      };
-    });
-
-    out.set(tid, patched);
+    out.set(tid, attachStopsToTrips(out.get(tid) || [], stopsByTripId, busTitles));
   }
 
   return out;
