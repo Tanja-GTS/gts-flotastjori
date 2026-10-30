@@ -8,7 +8,7 @@ import {
   type HydratedShiftDto,
 } from './shiftInstancesService';
 import { getShiftInstanceExternalFieldNames } from './msListsConfig';
-import { fetchTimonShiftPlans, type ExternalShiftPlan } from './timonService';
+import { fetchTimonShiftPlans, timonGroupsForWorkspace, type ExternalShiftPlan } from './timonService';
 
 function asString(value: unknown): string {
   if (value == null) return '';
@@ -296,13 +296,16 @@ export async function syncTimonShiftAssignments(params: {
 }> {
   const workspaceId = asString(params.workspaceId || 'south').trim() || 'south';
   const dryRun = params.dryRun !== false;
+  // The workspace's own groups (south = Strætó) are its whole schedule, so they
+  // do not make this a partial run; only groups passed in by the caller do.
+  const groups = params.groups || timonGroupsForWorkspace(workspaceId);
   const externalShifts =
     params.shifts && params.shifts.length > 0
       ? params.shifts
       : await fetchTimonShiftPlans({
           fromdate: params.fromdate,
           todate: params.todate,
-          groups: params.groups,
+          groups,
           ssns: params.ssns,
         });
 

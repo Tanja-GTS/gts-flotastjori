@@ -2,7 +2,7 @@ import { getListFieldDiagnostics } from './debugListsService';
 import { listDrivers, resolveDriversBySsn } from './driversService';
 import { listHydratedShifts, type HydratedShiftDto } from './shiftInstancesService';
 import { getShiftInstanceExternalFieldNames } from './msListsConfig';
-import { fetchTimonShiftPlans, getTimonConfig, timonTokenConfigured, type ExternalShiftPlan } from './timonService';
+import { fetchTimonShiftPlans, getTimonConfig, timonGroupsForWorkspace, timonTokenConfigured, type ExternalShiftPlan } from './timonService';
 
 function normalizeText(raw: unknown): string {
   return String(raw || '')
@@ -203,7 +203,7 @@ export async function previewTimonShiftMatching(params: {
       : await fetchTimonShiftPlans({
           fromdate: params.fromdate,
           todate: params.todate,
-          groups: params.groups,
+          groups: params.groups || timonGroupsForWorkspace(workspaceId),
           ssns: params.ssns,
         });
 

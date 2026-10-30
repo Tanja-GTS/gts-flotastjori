@@ -45,6 +45,18 @@ export function getTimonConfig() {
   };
 }
 
+// Which Tímon groups each workspace takes its shifts from, e.g. "south=1200"
+// (1200 = Strætó). Several: "south=1200,1201;airport=1300". A workspace that
+// is not listed gets everyone.
+export function timonGroupsForWorkspace(workspaceId: string): string {
+  const raw = optionalEnv('TIMON_WORKSPACE_GROUPS', 'south=1200');
+  for (const entry of raw.split(';')) {
+    const [ws, groups] = entry.split('=').map((part) => (part || '').trim());
+    if (ws && groups && ws.toLowerCase() === workspaceId.trim().toLowerCase()) return groups;
+  }
+  return '';
+}
+
 export function timonTokenConfigured(): boolean {
   return Boolean(getTimonConfig().token);
 }
