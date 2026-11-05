@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { createDriver, listDrivers } from '../services/driversService';
+import { createDriver, listDrivers, updateDriver } from '../services/driversService';
 import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
 
@@ -34,6 +34,26 @@ export async function postDriver(req: Request, res: Response) {
     cacheInvalidatePrefix('shifts|');
 
     res.status(201).json({ ok: true, driver });
+  } catch (err) {
+    sendApiError(res, err);
+  }
+}
+
+export async function patchDriver(req: Request, res: Response) {
+  try {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const driver = await updateDriver(String(req.params.id ?? ''), {
+      name: String(body.name ?? ''),
+      email: String(body.email ?? ''),
+      phone: String(body.phone ?? ''),
+      ssn: String(body.ssn ?? ''),
+    });
+
+    // Shifts embed driver names and phones, so clear them with the list.
+    cacheInvalidatePrefix('drivers');
+    cacheInvalidatePrefix('shifts|');
+
+    res.json({ ok: true, driver });
   } catch (err) {
     sendApiError(res, err);
   }

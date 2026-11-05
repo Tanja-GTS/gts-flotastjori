@@ -5,6 +5,7 @@ import ConfirmShift from './ConfirmShift';
 import ErrorBoundary from './ErrorBoundary';
 import { WORKSPACES } from './workspaces';
 import PrintDay from './PrintDay';
+import Buses from './Buses';
 import Drivers from './Drivers';
 import Timetables from './Timetables';
 import { fetchBuses, fetchDrivers, fetchShifts, fetchWorkspaces, generateShifts } from './data/backendApi';
@@ -202,9 +203,27 @@ export default function App() {
         name: d.name,
         email: d.email || '',
         phone: d.phone || '',
+        ssn: d.ssn || '',
       }))
       .filter((o) => o.value);
     setDriverOptions(opts);
+  }, []);
+
+  // Shared by the initial load and by the Buses page after adding a bus.
+  const reloadBuses = useCallback(async () => {
+    const buses = await fetchBuses();
+    const opts = (buses || [])
+      .map((b) => ({
+        value: b.id, // Use bus id as value
+        label: b.routeLabel && b.routeLabel !== b.title
+          ? `${b.title} (${b.routeLabel})`
+          : b.title,
+        title: b.title,
+        routeLabel: b.routeLabel || '',
+        id: b.id,
+      }))
+      .filter((o) => o.value);
+    setBusOptions(opts);
   }, []);
   const [didBackfillDriverPhones, setDidBackfillDriverPhones] = useState(false);
 
@@ -282,29 +301,13 @@ export default function App() {
     if (!canCallApi) return () => {
       cancelled = true;
     };
-    fetchBuses()
-      .then((buses) => {
-        if (cancelled) return;
-        const opts = (buses || [])
-          .map((b) => ({
-            value: b.id, // Use bus id as value
-            label: b.routeLabel && b.routeLabel !== b.title
-              ? `${b.title} (${b.routeLabel})`
-              : b.title,
-            title: b.title,
-            routeLabel: b.routeLabel || '',
-            id: b.id,
-          }))
-          .filter((o) => o.value);
-        setBusOptions(opts);
-      })
-      .catch(() => {
-        setBusOptions([]);
-      });
+    reloadBuses().catch(() => {
+      if (!cancelled) setBusOptions([]);
+    });
     return () => {
       cancelled = true;
     };
-  }, [canCallApi]);
+  }, [canCallApi, reloadBuses]);
 
   useEffect(() => {
     let cancelled = false;
@@ -345,6 +348,7 @@ export default function App() {
             name: d.name,
             email: d.email || '',
             phone: d.phone || '',
+            ssn: d.ssn || '',
           }))
           .filter((o) => o.value);
         setDriverOptions(opts);
@@ -535,6 +539,10 @@ export default function App() {
         <Route
           path="/drivers"
           element={<Drivers driverOptions={driverOptions} onDriverAdded={reloadDrivers} />}
+        />
+        <Route
+          path="/buses"
+          element={<Buses busOptions={busOptions} onBusAdded={reloadBuses} />}
         />
         <Route
           path="/confirm-shift"

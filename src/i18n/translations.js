@@ -11,6 +11,7 @@ export const translations = {
     },
     nav: {
       drivers: 'Drivers',
+      buses: 'Buses',
       timetables: 'Timetables',
       menu: 'Menu',
       changeWorkspace: 'Change workspace',
@@ -177,6 +178,36 @@ export const translations = {
         submit: 'Add driver',
         saved: 'Driver added:',
       },
+      edit: {
+        button: 'Edit',
+        title: 'Edit driver',
+        submit: 'Save',
+        saved: 'Driver saved:',
+      },
+    },
+
+    buses: {
+      breadcrumbs: {
+        buses: 'Buses',
+      },
+      title: 'Buses',
+      table: {
+        plate: 'Plate',
+      },
+      empty: 'No buses yet.',
+      add: {
+        title: 'Add a bus',
+        plate: 'Plate',
+        platePlaceholder: 'e.g. AB123',
+        submit: 'Add bus',
+        saved: 'Bus added:',
+      },
+      edit: {
+        button: 'Edit',
+        title: 'Edit bus',
+        submit: 'Save',
+        saved: 'Bus saved:',
+      },
     },
 
     timetables: {
@@ -278,6 +309,7 @@ export const translations = {
 
   nav: {
     drivers: 'Bílstjórar',
+    buses: 'Vagnar',
     timetables: 'Tímatöflur',
     menu: 'Valmynd',
     changeWorkspace: 'Skipta um vinnusvæði',
@@ -448,6 +480,36 @@ export const translations = {
       ssnPlaceholder: '10 tölustafir',
       submit: 'Bæta við bílstjóra',
       saved: 'Bílstjóra bætt við:',
+    },
+    edit: {
+      button: 'Breyta',
+      title: 'Breyta bílstjóra',
+      submit: 'Vista',
+      saved: 'Bílstjóri vistaður:',
+    },
+  },
+
+  buses: {
+    breadcrumbs: {
+      buses: 'Vagnar',
+    },
+    title: 'Vagnar',
+    table: {
+      plate: 'Númer',
+    },
+    empty: 'Engir vagnar enn.',
+    add: {
+      title: 'Bæta við vagni',
+      plate: 'Númer',
+      platePlaceholder: 't.d. AB123',
+      submit: 'Bæta við vagni',
+      saved: 'Vagni bætt við:',
+    },
+    edit: {
+      button: 'Breyta',
+      title: 'Breyta vagni',
+      submit: 'Vista',
+      saved: 'Vagn vistaður:',
     },
   },
 

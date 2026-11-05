@@ -1,5 +1,5 @@
 import { getGraphAppToken } from './graphAuth';
-import { graphGet, graphPost } from './graphClient';
+import { graphGet, graphPatch, graphPost } from './graphClient';
 import { getDriversFieldNames, getGraphConfig, getListIds, getShiftInstancesFieldNames } from './msListsConfig';
 import { optionalEnv } from '../utils/env';
 import { HttpError } from '../utils/httpError';
@@ -417,6 +417,97 @@ export async function createDriver(input: {
 
   return {
     id: String(created?.id || '').trim(),
+    name,
+    email: email || undefined,
+    phone: phone || undefined,
+    ssn: ssn || undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Editing drivers
+//
+// Same column resolution as createDriver. An emptied field is written as an
+// empty value so it is cleared in SharePoint, not left as it was.
+// ---------------------------------------------------------------------------
+
+export async function updateDriver(
+  id: string,
+  input: { name: string; email?: string; phone?: string; ssn?: string }
+): Promise<DriverDto> {
+  const driverId = asString(id).trim();
+  if (!/^\d+$/.test(driverId)) throw new HttpError(400, 'Invalid driver id');
+
+  const name = asString(input.name).trim();
+  const email = asString(input.email).trim();
+  const phone = asString(input.phone).trim();
+  const ssn = normalizeSsn(input.ssn);
+
+  if (!name) throw new HttpError(400, 'Name is required');
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpError(400, 'Email is not a valid address');
+  }
+  if (ssn && !looksLikeSsn(ssn)) {
+    throw new HttpError(400, 'Kennitala must be 10 digits');
+  }
+
+  const existing = await listDrivers();
+  const current = existing.find((d) => d.id === driverId);
+  if (!current) throw new HttpError(404, 'Driver not found');
+
+  // Tímon matches drivers by kennitala, so two drivers must never share one.
+  if (ssn) {
+    const clash = existing.find((d) => d.id !== driverId && normalizeSsn(d.ssn) === ssn);
+    if (clash) throw new HttpError(409, `A driver with that kennitala already exists: ${clash.name}`);
+  }
+
+  // Only write what the manager changed. Reading finds values by probing
+  // several column names, so re-sending an untouched value could copy it into
+  // a different column, and a kennitala Tímon relies on must not move.
+  const changed = {
+    name: name !== asString(current.name).trim(),
+    email: email !== asString(current.email).trim(),
+    phone: phone !== asString(current.phone).trim(),
+    ssn: ssn !== normalizeSsn(current.ssn),
+  };
+
+  const columns = await resolveDriverColumns();
+  const missing: string[] = [];
+  if (changed.email && !columns.email) missing.push('email');
+  if (changed.phone && !columns.phone) missing.push('phone');
+  if (changed.ssn && !columns.ssn) missing.push('kennitala');
+  if (missing.length) {
+    throw new HttpError(
+      500,
+      `Could not find these columns in the Drivers list: ${missing.join(', ')}. ` +
+        'Check the column names in SharePoint.'
+    );
+  }
+
+  const fields: Record<string, unknown> = {};
+  if (changed.name) {
+    fields.Title = name;
+    if (columns.name && columns.name !== 'Title') fields[columns.name] = name;
+  }
+  if (changed.email && columns.email) fields[columns.email] = email;
+  if (changed.phone && columns.phone) fields[columns.phone] = phone;
+  if (changed.ssn && columns.ssn) fields[columns.ssn] = ssn;
+
+  if (Object.keys(fields).length === 0) return current;
+
+  const driversListId = await getDriversListId();
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(driversListId)}/items/${encodeURIComponent(driverId)}/fields`;
+
+  await graphPatch(url, token, fields);
+
+  invalidateDriversCache();
+
+  return {
+    id: driverId,
     name,
     email: email || undefined,
     phone: phone || undefined,

@@ -154,6 +154,26 @@ export async function fetchBuses() {
   return data.buses || [];
 }
 
+export async function createBus({ plate }) {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/buses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plate }),
+  });
+  return data.bus;
+}
+
+export async function updateBus(id, { plate }) {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/buses/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plate }),
+  });
+  return data.bus;
+}
+
 export async function fetchDrivers() {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/drivers`);
@@ -164,6 +184,16 @@ export async function createDriver({ name, email, phone, ssn }) {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/drivers`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, phone, ssn }),
+  });
+  return data.driver;
+}
+
+export async function updateDriver(id, { name, email, phone, ssn }) {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/drivers/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, phone, ssn }),
   });

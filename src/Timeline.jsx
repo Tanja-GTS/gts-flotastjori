@@ -938,6 +938,9 @@ export default function Timeline({
                   <Menu.Item onClick={() => navigate('/drivers')}>
                     {t('nav.drivers')}
                   </Menu.Item>
+                  <Menu.Item onClick={() => navigate('/buses')}>
+                    {t('nav.buses')}
+                  </Menu.Item>
                   <Menu.Item onClick={() => navigate('/timetables')}>
                     {t('nav.timetables')}
                   </Menu.Item>
@@ -997,6 +1000,17 @@ export default function Timeline({
             }}
           >
             {t('nav.drivers')}
+          </button>
+
+          <button
+            type="button"
+            className="mobileMenu__item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              navigate('/buses');
+            }}
+          >
+            {t('nav.buses')}
           </button>
 
           <button

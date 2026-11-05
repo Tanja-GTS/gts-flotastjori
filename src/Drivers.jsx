@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Group, Modal, Table, TextInput, Title } from '@mantine/core';
 import { useI18n } from './i18n';
-import { createDriver } from './data/backendApi';
+import { createDriver, updateDriver } from './data/backendApi';
 import './drivers.css';
 
 function isUnassignedDriver(opt) {
@@ -13,15 +13,20 @@ function isUnassignedDriver(opt) {
   return /unassigned/i.test(name);
 }
 
+const emptyForm = { name: '', phone: '', email: '', ssn: '' };
+
 export default function Drivers({ driverOptions = [], onDriverAdded }) {
   const { t, locale } = useI18n();
 
-  const emptyForm = { name: '', phone: '', email: '', ssn: '' };
   const [opened, setOpened] = useState(false);
+  // null while adding; the driver's id while editing.
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [savedName, setSavedName] = useState('');
+  const [savedNote, setSavedNote] = useState('');
+
+  const isEditing = editingId != null;
 
   const setField = (key) => (e) => {
     // Read the value synchronously: React clears currentTarget once the handler
@@ -29,38 +34,59 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
     const value = e.target.value;
     setForm((f) => ({ ...f, [key]: value }));
     setError('');
-    setSavedName('');
+    setSavedNote('');
   };
 
   const canSave = String(form.name || '').trim().length > 0 && !saving;
 
-  function openForm() {
+  function openAdd() {
+    setEditingId(null);
     setForm(emptyForm);
     setError('');
-    setSavedName('');
+    setSavedNote('');
+    setOpened(true);
+  }
+
+  function openEdit(driver) {
+    setEditingId(String(driver.value));
+    setForm({
+      name: String(driver?.name || driver?.label || '').trim(),
+      phone: String(driver?.phone || '').trim(),
+      email: String(driver?.email || '').trim(),
+      ssn: String(driver?.ssn || '').trim(),
+    });
+    setError('');
+    setSavedNote('');
     setOpened(true);
   }
 
   function closeForm() {
     if (saving) return;
     setOpened(false);
+    setEditingId(null);
     setForm(emptyForm);
     setError('');
   }
 
-  async function handleAdd() {
+  async function handleSave() {
+    if (!canSave) return;
     setSaving(true);
     setError('');
-    setSavedName('');
+    setSavedNote('');
+    const payload = {
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      ssn: form.ssn.trim(),
+    };
     try {
-      const created = await createDriver({
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        ssn: form.ssn.trim(),
-      });
+      const saved = isEditing
+        ? await updateDriver(editingId, payload)
+        : await createDriver(payload);
+      const label = isEditing ? t('drivers.edit.saved') : t('drivers.add.saved');
+      setSavedNote(`${label} ${saved?.name || payload.name}`);
       setForm(emptyForm);
-      setSavedName(created?.name || form.name.trim());
+      setEditingId(null);
       setOpened(false);
       if (onDriverAdded) await onDriverAdded();
     } catch (e) {
@@ -97,17 +123,28 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
       </Title>
 
       <Group className="driversActions">
-        <Button onClick={openForm}>{t('drivers.add.title')}</Button>
+        <Button onClick={openAdd}>{t('drivers.add.title')}</Button>
       </Group>
 
-      {savedName && (
+      {savedNote && (
         <div className="driversSavedNote" role="status">
-          {t('drivers.add.saved')} {savedName}
+          {savedNote}
         </div>
       )}
 
-      <Modal opened={opened} onClose={closeForm} title={t('drivers.add.title')} centered>
-        <div className="driversAddForm">
+      <Modal
+        opened={opened}
+        onClose={closeForm}
+        title={isEditing ? t('drivers.edit.title') : t('drivers.add.title')}
+        centered
+      >
+        <form
+          className="driversAddForm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
+        >
           <TextInput
             label={t('drivers.table.name')}
             value={form.name}
@@ -123,7 +160,7 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
             onChange={setField('ssn')}
             placeholder={t('drivers.add.ssnPlaceholder')}
           />
-        </div>
+        </form>
 
         {error && (
           <div role="alert" style={{ marginTop: 10, fontSize: 13, color: '#b00020', fontWeight: 600 }}>
@@ -135,8 +172,8 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
           <Button variant="default" onClick={closeForm} disabled={saving}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleAdd} loading={saving} disabled={!canSave}>
-            {t('drivers.add.submit')}
+          <Button onClick={handleSave} loading={saving} disabled={!canSave}>
+            {isEditing ? t('drivers.edit.submit') : t('drivers.add.submit')}
           </Button>
         </Group>
       </Modal>
@@ -148,6 +185,7 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
               <Table.Th>{t('drivers.table.name')}</Table.Th>
               <Table.Th>{t('drivers.table.phone')}</Table.Th>
               <Table.Th>{t('drivers.table.email')}</Table.Th>
+              <Table.Th className="driversTable__actionCol" aria-label={t('drivers.edit.button')} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -156,6 +194,11 @@ export default function Drivers({ driverOptions = [], onDriverAdded }) {
                 <Table.Td>{String(d?.name || d?.label || '').trim()}</Table.Td>
                 <Table.Td>{String(d?.phone || '').trim()}</Table.Td>
                 <Table.Td>{String(d?.email || '').trim()}</Table.Td>
+                <Table.Td className="driversTable__actionCol">
+                  <Button size="compact-sm" variant="subtle" onClick={() => openEdit(d)}>
+                    {t('drivers.edit.button')}
+                  </Button>
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

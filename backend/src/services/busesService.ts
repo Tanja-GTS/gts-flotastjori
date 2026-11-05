@@ -1,5 +1,6 @@
 import { getGraphAppToken } from './graphAuth';
-import { graphGet } from './graphClient';
+import { graphGet, graphPatch, graphPost } from './graphClient';
+import { HttpError } from '../utils/httpError';
 import { getGraphConfig, getListIds, getShiftInstancesFieldNames, getBusesFieldNames } from './msListsConfig';
 import { optionalEnv } from '../utils/env';
 
@@ -208,4 +209,151 @@ export async function resolveBusTitles(params: { busIds: string[] }): Promise<Ma
     if (uniqueIds.includes(b.id)) map.set(b.id, b.title);
   }
   return map;
+}
+
+
+// ---------------------------------------------------------------------------
+// Creating buses
+//
+// listBuses() reads the plate by probing several column names, but a write has
+// to name the column exactly. So resolve the Buses list's real plate column
+// from Graph once, and cache it. Same approach as creating drivers.
+// ---------------------------------------------------------------------------
+
+const PLATE_CANDIDATES = [
+  'plate',
+  'licenseplate',
+  'license plate',
+  'registration',
+  'reg',
+  'númer',
+  'numer',
+  'bílnúmer',
+  'bilnumer',
+  'skráningarnúmer',
+  'skraningarnumer',
+];
+
+let plateColumnCache: { fetchedAtMs: number; name: string } | null = null;
+
+function isWritableColumn(col: GraphColumn): boolean {
+  if ((col as any).readOnly === true) return false;
+  if ((col as any).hidden === true) return false;
+  return true;
+}
+
+/**
+ * The internal name of the column that holds the plate, other than Title.
+ * Empty string when the list keeps the plate in Title only.
+ */
+async function resolveBusPlateColumn(busesListId: string): Promise<string> {
+  const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
+  const now = Date.now();
+  if (plateColumnCache && now - plateColumnCache.fetchedAtMs < ttlMs) return plateColumnCache.name;
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
+  const res = await graphGet<GraphColumnsResponse>(url, token);
+  const cols = (res.value || []).filter(isWritableColumn);
+
+  const configured = String(getBusesFieldNames().plate || '').trim();
+  let name = '';
+  if (configured && cols.some((c) => String(c.name || '') === configured)) {
+    name = configured;
+  } else {
+    const hit = cols.find((c) => {
+      const internal = String(c.name || '').trim().toLowerCase();
+      const display = String(c.displayName || '').trim().toLowerCase();
+      return PLATE_CANDIDATES.includes(internal) || PLATE_CANDIDATES.includes(display);
+    });
+    // listBuses() reads field_1 before Title, so a plate saved only to Title
+    // would show the wrong text if field_1 exists. Write to it as well.
+    const field1 = cols.find((c) => String(c.name || '') === 'field_1');
+    name = String(hit?.name || field1?.name || '').trim();
+  }
+  if (name === 'Title') name = '';
+
+  plateColumnCache = { fetchedAtMs: now, name };
+  return name;
+}
+
+function normalizePlate(raw: unknown): string {
+  return asString(raw).trim().replace(/[\s-]+/g, '').toUpperCase();
+}
+
+export function invalidateBusesCache(): void {
+  busesCache = null;
+  plateColumnCache = null;
+}
+
+export async function createBus(input: { plate: string }): Promise<BusEntry> {
+  // Keep what the manager typed, minus stray outer spaces and doubled spaces.
+  const plate = asString(input.plate).trim().replace(/\s+/g, ' ');
+  if (!plate) throw new HttpError(400, 'Plate is required');
+  if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
+
+  // Two rows with the same plate would make the bus picker ambiguous.
+  const existing = await listBuses();
+  const key = normalizePlate(plate);
+  const clash = existing.find((b) => normalizePlate(b.title) === key);
+  if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
+
+  const busesListId = await getBusesListId();
+  if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
+
+  const plateColumn = await resolveBusPlateColumn(busesListId);
+  const fields: Record<string, unknown> = { Title: plate };
+  if (plateColumn) fields[plateColumn] = plate;
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/items`;
+
+  const created = await graphPost<GraphListItem>(url, token, { fields });
+
+  invalidateBusesCache();
+
+  return { id: String(created?.id || '').trim(), title: plate };
+}
+
+export async function updateBus(id: string, input: { plate: string }): Promise<BusEntry> {
+  const busId = asString(id).trim();
+  if (!/^\d+$/.test(busId)) throw new HttpError(400, 'Invalid bus id');
+
+  const plate = asString(input.plate).trim().replace(/\s+/g, ' ');
+  if (!plate) throw new HttpError(400, 'Plate is required');
+  if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
+
+  const existing = await listBuses();
+  const current = existing.find((b) => b.id === busId);
+  if (!current) throw new HttpError(404, 'Bus not found');
+
+  const key = normalizePlate(plate);
+  const clash = existing.find((b) => b.id !== busId && normalizePlate(b.title) === key);
+  if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
+  if (plate === current.title) return current;
+
+  const busesListId = await getBusesListId();
+  if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
+
+  const plateColumn = await resolveBusPlateColumn(busesListId);
+  const fields: Record<string, unknown> = { Title: plate };
+  if (plateColumn) fields[plateColumn] = plate;
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/items/${encodeURIComponent(busId)}/fields`;
+
+  await graphPatch(url, token, fields);
+
+  invalidateBusesCache();
+
+  return { ...current, title: plate };
 }
