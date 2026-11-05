@@ -36,6 +36,17 @@ export type ExternalArrdep = {
   approved?: boolean;
 };
 
+// One person from /presence/. Only the contact fields we copy into the Drivers
+// list are typed here; the row carries live clock status too.
+export type ExternalPerson = {
+  ssn?: string | null;
+  name?: string | null;
+  email?: string | null;
+  mobilephone?: string | null;
+  workphone?: string | null;
+  grpno?: string | null;
+};
+
 export function getTimonConfig() {
   return {
     baseUrl: optionalEnv('TIMON_API_BASE_URL', 'https://gts.timon.is/api/v2').trim().replace(/\/$/, ''),
@@ -134,4 +145,20 @@ export async function fetchTimonArrdeps(params: {
 
   const data = (await res.json()) as unknown;
   return Array.isArray(data) ? (data as ExternalArrdep[]) : [];
+}
+
+// Everyone in Tímon, with contact details. One call returns all employees.
+export async function fetchTimonPeople(): Promise<ExternalPerson[]> {
+  const cfg = getTimonConfig();
+  const res = await fetch(`${cfg.baseUrl}/presence/`, { method: 'GET', headers: timonAuthHeaders() });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new HttpError(res.status, `Tímon presence request failed: ${res.status}`, {
+      code: 'timon_presence_failed',
+      details: text,
+    });
+  }
+
+  const data = (await res.json()) as unknown;
+  return Array.isArray(data) ? (data as ExternalPerson[]) : [];
 }

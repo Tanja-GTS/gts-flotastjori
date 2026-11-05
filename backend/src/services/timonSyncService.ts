@@ -1,4 +1,6 @@
-import { resolveDriversBySsn } from './driversService';
+import { createDriver, invalidateDriversCache, resolveDriversBySsn, type DriverDto } from './driversService';
+import { cacheInvalidatePrefix } from './simpleCache';
+import { optionalEnv } from '../utils/env';
 import {
   assignDriverToShiftInstance,
   listHydratedShifts,
@@ -8,7 +10,13 @@ import {
   type HydratedShiftDto,
 } from './shiftInstancesService';
 import { getShiftInstanceExternalFieldNames } from './msListsConfig';
-import { fetchTimonShiftPlans, timonGroupsForWorkspace, type ExternalShiftPlan } from './timonService';
+import {
+  fetchTimonPeople,
+  fetchTimonShiftPlans,
+  timonGroupsForWorkspace,
+  type ExternalPerson,
+  type ExternalShiftPlan,
+} from './timonService';
 
 function asString(value: unknown): string {
   if (value == null) return '';
@@ -288,10 +296,12 @@ export async function syncTimonShiftAssignments(params: {
     unmatchedCount: number;
     conflictCount: number;
     clearedCount: number;
+    addedDriverCount: number;
   };
   results: TimonMatchResult[];
   conflicts: TimonConflict[];
   cleared: TimonClearedCard[];
+  addedDrivers: TimonAddedDriver[];
   warnings: string[];
 }> {
   const workspaceId = asString(params.workspaceId || 'south').trim() || 'south';
@@ -332,6 +342,7 @@ export async function syncTimonShiftAssignments(params: {
   });
 
   const warnings: string[] = [];
+
   const results: TimonMatchResult[] = [];
   const ext = getShiftInstanceExternalFieldNames();
   const plan = planTimonMatches({
@@ -339,6 +350,22 @@ export async function syncTimonShiftAssignments(params: {
     localShifts,
     previousInstanceByExternalId: instanceIdByExternalShiftId,
   });
+
+  // Someone on a Tímon shift who is not in our Drivers list yet: add them, so
+  // their shifts fill in on this run instead of staying empty. Only for a
+  // workspace tied to a Tímon group (south = Strætó); without one the shift
+  // plan is everyone in Tímon, and they are not all our drivers.
+  const addedDrivers = groups
+    ? await addMissingDrivers({
+        externalShifts: externalShifts.filter((shift) => {
+          const planned = plan.get(asString(shift.id).trim());
+          return Boolean(planned && 'instanceId' in planned);
+        }),
+        driversBySsn,
+        dryRun,
+        warnings,
+      })
+    : [];
 
   // Detect double-bookings: the same shift (name + arr + dep) assigned to 2+ people in Tímon.
   const assignedRowsByGroup = new Map<string, ExternalShiftPlan[]>();
@@ -587,10 +614,114 @@ export async function syncTimonShiftAssignments(params: {
       unmatchedCount: results.filter((result) => result.action === 'unmatched').length,
       conflictCount: conflicts.length,
       clearedCount: cleared.length,
+      addedDriverCount: addedDrivers.length,
     },
     results,
     conflicts,
     cleared,
+    addedDrivers,
     warnings,
   };
+}
+
+export type TimonAddedDriver = {
+  ssn: string;
+  name: string;
+  driverId: string | null; // null on a test run, where nothing is written
+  phone: string | null;
+  email: string | null;
+};
+
+function looksLikeEmail(raw: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
+}
+
+/**
+ * Creates a Drivers row for every kennitala on the given assigned Tímon shifts
+ * (the ones that match a card on our board) that has no local driver, and adds
+ * it to driversBySsn so the run assigns them.
+ * Name comes from the shift plan; phone and email from Tímon's people list
+ * when it has them. Turn off with TIMON_AUTO_ADD_DRIVERS=false.
+ */
+export async function addMissingDrivers(params: {
+  externalShifts: ExternalShiftPlan[];
+  driversBySsn: Map<string, DriverDto>;
+  dryRun: boolean;
+  warnings: string[];
+}): Promise<TimonAddedDriver[]> {
+  const enabled = optionalEnv('TIMON_AUTO_ADD_DRIVERS', 'true').trim().toLowerCase() !== 'false';
+  if (!enabled) return [];
+
+  const nameBySsn = new Map<string, string>();
+  for (const shift of params.externalShifts) {
+    if (shift.unassigned) continue;
+    const ssn = normalizeSsn(shift.ssn);
+    if (!/^\d{10}$/.test(ssn) || params.driversBySsn.has(ssn)) continue;
+    const name = asString(shift.ssn_name).trim();
+    if (!nameBySsn.has(ssn) || (!nameBySsn.get(ssn) && name)) nameBySsn.set(ssn, name);
+  }
+  if (nameBySsn.size === 0) return [];
+
+  // Contact details are a bonus: without them the driver is still added.
+  const personBySsn = new Map<string, ExternalPerson>();
+  try {
+    for (const person of await fetchTimonPeople()) {
+      const ssn = normalizeSsn(person.ssn);
+      if (ssn) personBySsn.set(ssn, person);
+    }
+  } catch (err) {
+    params.warnings.push(
+      `Could not read phone/email from Tímon, adding drivers without them: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  // Re-read the Drivers list, so a driver added since it was cached (by a
+  // manager, or by another sync) is found by the duplicate check, not re-added.
+  if (!params.dryRun) invalidateDriversCache();
+
+  const added: TimonAddedDriver[] = [];
+  for (const [ssn, shiftName] of nameBySsn) {
+    const person = personBySsn.get(ssn);
+    const name = shiftName || asString(person?.name).trim();
+    if (!name) {
+      params.warnings.push(`Not added: kennitala ${ssn} has no name in Tímon.`);
+      continue;
+    }
+    const phone = asString(person?.mobilephone || person?.workphone).trim();
+    const rawEmail = asString(person?.email).trim();
+    const email = looksLikeEmail(rawEmail) ? rawEmail : '';
+
+    if (params.dryRun) {
+      added.push({ ssn, name, driverId: null, phone: phone || null, email: email || null });
+      continue;
+    }
+
+    try {
+      let driver: DriverDto;
+      try {
+        driver = await createDriver({ name, ssn, phone, email });
+      } catch (err) {
+        // A driver with this kennitala already exists: nothing to add.
+        if ((err as { status?: number })?.status === 409) throw err;
+        // Otherwise the contact details may be what failed; the kennitala is
+        // what matters for matching, so try again with name and kennitala only.
+        if (!phone && !email) throw err;
+        driver = await createDriver({ name, ssn });
+      }
+      params.driversBySsn.set(ssn, driver);
+      added.push({ ssn, name, driverId: driver.id, phone: driver.phone || null, email: driver.email || null });
+      // eslint-disable-next-line no-console
+      console.log(`[timon-sync] added driver ${name} (driver ${driver.id}) from Tímon`);
+    } catch (err) {
+      params.warnings.push(
+        `Could not add driver ${name} (${ssn}) from Tímon: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  if (added.length > 0 && !params.dryRun) {
+    cacheInvalidatePrefix('drivers');
+    cacheInvalidatePrefix('shifts|');
+  }
+  return added;
 }

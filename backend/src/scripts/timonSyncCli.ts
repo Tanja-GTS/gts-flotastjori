@@ -28,7 +28,9 @@ type TimonSyncModule = {
       missingDriverCount: number;
       unmatchedCount: number;
       conflictCount: number;
+      addedDriverCount?: number;
     };
+    addedDrivers?: Array<{ name: string; driverId: string | null }>;
     warnings: string[];
   }>;
 };
@@ -143,6 +145,7 @@ async function main() {
         dryRun,
         generationResults,
         summary: sync.summary,
+        addedDrivers: (sync.addedDrivers || []).map((d) => ({ name: d.name, driverId: d.driverId })),
         warnings: sync.warnings,
       },
       null,
