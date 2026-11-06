@@ -148,30 +148,38 @@ export async function fetchTimetables({ workspaceId }) {
   return data.seasons || [];
 }
 
-export async function fetchBuses() {
+// fresh: read SharePoint now instead of the saved copy.
+export async function fetchBuses({ fresh = false } = {}) {
   const base = getBaseUrl();
-  const data = await fetchJson(`${base}/api/buses`);
+  const data = await fetchJson(`${base}/api/buses${fresh ? '?fresh=1' : ''}`);
   return data.buses || [];
 }
 
-export async function createBus({ plate }) {
+export async function createBus({ plate, route, capacity }) {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/buses`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plate }),
+    body: JSON.stringify({ plate, route, capacity }),
   });
   return data.bus;
 }
 
-export async function updateBus(id, { plate }) {
+// changes: only the fields to change, e.g. { capacity: '50' }. Fields left out
+// are not touched.
+export async function updateBus(id, changes) {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/buses/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plate }),
+    body: JSON.stringify(changes),
   });
   return data.bus;
+}
+
+export async function deleteBus(id) {
+  const base = getBaseUrl();
+  await fetchJson(`${base}/api/buses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function fetchDrivers() {

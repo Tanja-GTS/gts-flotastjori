@@ -9,6 +9,8 @@ import { optionalEnv } from '../utils/env';
 export type ShiftPatternDto = {
   id: string;
   route: string;
+  // The Route lookup's row id (route above is that row's title).
+  routeId?: string;
   routeName?: string;
   timonRouteCode?: string;
   timonShiftName?: string;
@@ -324,7 +326,11 @@ async function fetchAllEnrichedPatternsInner(now: number): Promise<ShiftPatternD
   );
   const routeTitles = await resolveRouteTitles({ routeIds });
 
-  const items = enriched.map((p) => ({ ...p, route: routeTitles.get(p.route) || p.route }));
+  const items = enriched.map((p) => ({
+    ...p,
+    routeId: p.route || undefined,
+    route: routeTitles.get(p.route) || p.route,
+  }));
   enrichedPatternsCache = { fetchedAtMs: now, items };
   return items;
 }

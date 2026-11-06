@@ -63,6 +63,8 @@ export function getBusesFieldNames() {
     // Internal column name for the license plate field in the Buses list.
     // Override with BUSES_FIELD_PLATE if your list uses a non-standard name (e.g. "field_1").
     plate: optionalEnv('BUSES_FIELD_PLATE', ''),
+    // Internal column name for the seat capacity. Found by name when empty.
+    capacity: optionalEnv('BUSES_FIELD_CAPACITY', ''),
   };
 }
 

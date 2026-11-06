@@ -210,8 +210,8 @@ export default function App() {
   }, []);
 
   // Shared by the initial load and by the Buses page after adding a bus.
-  const reloadBuses = useCallback(async () => {
-    const buses = await fetchBuses();
+  const reloadBuses = useCallback(async ({ fresh = false } = {}) => {
+    const buses = await fetchBuses({ fresh });
     const opts = (buses || [])
       .map((b) => ({
         value: b.id, // Use bus id as value
@@ -220,6 +220,8 @@ export default function App() {
           : b.title,
         title: b.title,
         routeLabel: b.routeLabel || '',
+        route: b.route || '',
+        capacity: b.capacity ?? null,
         id: b.id,
       }))
       .filter((o) => o.value);
@@ -542,7 +544,7 @@ export default function App() {
         />
         <Route
           path="/buses"
-          element={<Buses busOptions={busOptions} onBusAdded={reloadBuses} />}
+          element={<Buses busOptions={busOptions} onReload={reloadBuses} />}
         />
         <Route
           path="/confirm-shift"

@@ -1,5 +1,7 @@
 import { getGraphAppToken } from './graphAuth';
-import { graphGet, graphPatch, graphPost } from './graphClient';
+import { graphDelete, graphGet, graphPatch, graphPost } from './graphClient';
+import { listShiftPatterns } from './shiftPatternsService';
+import { getTemplateDefaults } from './templatesService';
 import { HttpError } from '../utils/httpError';
 import { getGraphConfig, getListIds, getShiftInstancesFieldNames, getBusesFieldNames } from './msListsConfig';
 import { optionalEnv } from '../utils/env';
@@ -110,7 +112,16 @@ export async function getBusesListId(): Promise<string> {
   return inferBusesListIdFromSiteLists();
 }
 
-type BusEntry = { id: string; title: string; routeId?: string; routeLabel?: string };
+type BusEntry = {
+  id: string;
+  title: string; // the plate
+  routeId?: string;
+  routeLabel?: string;
+  // Title of the row. Shift patterns look routes up through it, so it is
+  // what shift names are built from.
+  route?: string;
+  capacity?: number;
+};
 let busesCache: { fetchedAtMs: number; items: BusEntry[] } | null = null;
 let busesFetchInProgress: Promise<BusEntry[]> | null = null;
 
@@ -142,6 +153,13 @@ export async function listBuses(): Promise<BusEntry[]> {
       }
 
       const busFields = getBusesFieldNames();
+      // Only needed for capacity; a failure here must not break the bus list.
+      let capacityColumn = '';
+      try {
+        capacityColumn = (await resolveBusColumns(busesListId)).capacity;
+      } catch {
+        capacityColumn = '';
+      }
       const busIdToTitle = new Map<string, string>();
       for (const item of allItems) {
         const f = item.fields || {};
@@ -177,7 +195,17 @@ export async function listBuses(): Promise<BusEntry[]> {
           const routeLabel = routeIdToLabel.get(routeId) || '';
           const title = busIdToTitle.get(id) || id;
           if (debugEnabled) debug.push({id, title, routeId, routeLabel, fields});
-          return { id, title, routeId: routeId || undefined, routeLabel: routeLabel || undefined };
+          const route = asString(fields.Title).trim();
+          const capacityRaw = capacityColumn ? fields[capacityColumn] : undefined;
+          const capacity = capacityRaw == null || capacityRaw === '' ? NaN : Number(capacityRaw);
+          return {
+            id,
+            title,
+            routeId: routeId || undefined,
+            routeLabel: routeLabel || undefined,
+            route: route || undefined,
+            capacity: Number.isFinite(capacity) ? capacity : undefined,
+          };
         })
         .filter((b) => b.id);
       if (debugEnabled) {
@@ -213,16 +241,19 @@ export async function resolveBusTitles(params: { busIds: string[] }): Promise<Ma
 
 
 // ---------------------------------------------------------------------------
-// Creating and editing buses
+// Adding, changing and deleting buses
 //
-// In the Buses list the plate is in its own column (field_1 unless
-// BUSES_FIELD_PLATE says otherwise) and Title holds the ROUTE NUMBER. Shift
-// patterns look routes up through that Title, so it is what shift names are
-// built from. Writing a plate into Title renames every shift on that route,
-// so a bus edit must only ever touch the plate column.
+// Each row is a bus: plate in its own column (field_1 unless
+// BUSES_FIELD_PLATE says otherwise), capacity in a Capacity column, and
+// Title holds the ROUTE number. Shift patterns look routes up through that
+// Title, so changing Route renames the shifts on that route, and deleting a
+// row a pattern uses would leave those shifts without a route. So:
+// - a change writes only the fields that actually changed;
+// - the plate never goes into Title;
+// - a row still used by a pattern, a template, or as the default bus cannot
+//   be deleted.
 // ---------------------------------------------------------------------------
 
-// Never "númer"/"number": in this list that can mean the route number.
 const PLATE_CANDIDATES = [
   'plate',
   'licenseplate',
@@ -234,7 +265,21 @@ const PLATE_CANDIDATES = [
   'skraningarnumer',
 ];
 
-let plateColumnCache: { fetchedAtMs: number; name: string } | null = null;
+const CAPACITY_CANDIDATES = [
+  'capacity',
+  'seats',
+  'seat capacity',
+  'sæti',
+  'saeti',
+  'sætafjöldi',
+  'saetafjoldi',
+  'fjöldi sæta',
+  'farþegafjöldi',
+  'farthegafjoldi',
+];
+
+type BusColumns = { plate: string; capacity: string };
+let busColumnsCache: { fetchedAtMs: number; listId: string; cols: BusColumns } | null = null;
 
 function isWritableColumn(col: GraphColumn): boolean {
   if ((col as any).readOnly === true) return false;
@@ -242,14 +287,13 @@ function isWritableColumn(col: GraphColumn): boolean {
   return true;
 }
 
-/**
- * The internal name of the column that holds the plate. Never Title.
- * Empty string when no such column exists, and then nothing may be written.
- */
-async function resolveBusPlateColumn(busesListId: string): Promise<string> {
+/** Internal names of the plate and capacity columns. Never Title; '' when missing. */
+async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
   const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
   const now = Date.now();
-  if (plateColumnCache && now - plateColumnCache.fetchedAtMs < ttlMs) return plateColumnCache.name;
+  if (busColumnsCache && busColumnsCache.listId === busesListId && now - busColumnsCache.fetchedAtMs < ttlMs) {
+    return busColumnsCache.cols;
+  }
 
   const graph = getGraphConfig();
   const token = await getGraphAppToken(graph);
@@ -258,115 +302,220 @@ async function resolveBusPlateColumn(busesListId: string): Promise<string> {
   )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
   const res = await graphGet<GraphColumnsResponse>(url, token);
   const cols = (res.value || []).filter(isWritableColumn).filter((c) => String(c.name || '') !== 'Title');
-  const has = (name: string) => cols.some((c) => String(c.name || '') === name);
+  const has = (name: string) => Boolean(name) && name !== 'Title' && cols.some((c) => String(c.name || '') === name);
+  const byName = (candidates: string[], except: string) =>
+    String(
+      cols.find((c) => {
+        const internal = String(c.name || '').trim();
+        if (!internal || internal === except) return false;
+        const display = String(c.displayName || '').trim().toLowerCase();
+        return candidates.includes(internal.toLowerCase()) || candidates.includes(display);
+      })?.name || ''
+    ).trim();
 
-  // Same order listBuses() reads the plate in: configured, then field_1.
-  const configured = String(getBusesFieldNames().plate || '').trim();
-  let name = '';
-  if (configured && configured !== 'Title' && has(configured)) {
-    name = configured;
-  } else if (has('field_1')) {
-    name = 'field_1';
-  } else {
-    const hit = cols.find((c) => {
-      const internal = String(c.name || '').trim().toLowerCase();
-      const display = String(c.displayName || '').trim().toLowerCase();
-      return PLATE_CANDIDATES.includes(internal) || PLATE_CANDIDATES.includes(display);
-    });
-    name = String(hit?.name || '').trim();
-  }
+  // Plate: same order listBuses() reads it in — configured, then field_1.
+  const configured = getBusesFieldNames();
+  let plate = '';
+  if (has(String(configured.plate || '').trim())) plate = String(configured.plate).trim();
+  else if (has('field_1')) plate = 'field_1';
+  else plate = byName(PLATE_CANDIDATES, '');
 
-  plateColumnCache = { fetchedAtMs: now, name };
-  return name;
-}
+  let capacity = '';
+  if (has(String(configured.capacity || '').trim())) capacity = String(configured.capacity).trim();
+  else capacity = byName(CAPACITY_CANDIDATES, plate);
 
-async function requirePlateColumn(busesListId: string): Promise<string> {
-  const plateColumn = await resolveBusPlateColumn(busesListId);
-  if (!plateColumn) {
-    throw new HttpError(
-      500,
-      'Could not find the plate column in the Buses list, so nothing was saved. ' +
-        'Set BUSES_FIELD_PLATE to its internal column name.'
-    );
-  }
-  return plateColumn;
+  const result = { plate, capacity };
+  busColumnsCache = { fetchedAtMs: now, listId: busesListId, cols: result };
+  return result;
 }
 
 function normalizePlate(raw: unknown): string {
   return asString(raw).trim().replace(/[\s-]+/g, '').toUpperCase();
 }
 
-export function invalidateBusesCache(): void {
-  busesCache = null;
-  plateColumnCache = null;
+function cleanText(raw: unknown): string {
+  return asString(raw).trim().replace(/\s+/g, ' ');
 }
 
-export async function createBus(input: { plate: string }): Promise<BusEntry> {
-  // Keep what the manager typed, minus stray outer spaces and doubled spaces.
-  const plate = asString(input.plate).trim().replace(/\s+/g, ' ');
+/** '' clears it; otherwise a whole number of seats. */
+function parseCapacity(raw: unknown): number | null {
+  const text = asString(raw).trim();
+  if (!text) return null;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 1 || n > 300) {
+    throw new HttpError(400, 'Capacity must be a whole number of seats');
+  }
+  return n;
+}
+
+export function invalidateBusesCache(): void {
+  busesCache = null;
+  busColumnsCache = null;
+}
+
+async function busesListContext() {
+  const busesListId = await getBusesListId();
+  if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const itemsUrl = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/items`;
+  return { busesListId, token, itemsUrl };
+}
+
+function missingCapacityColumn(): HttpError {
+  return new HttpError(
+    500,
+    'The Buses list has no Capacity column yet, so capacity was not saved. ' +
+      'Add a Number column named "Capacity" to the Buses list in SharePoint.'
+  );
+}
+
+export type BusInput = { plate?: string; route?: string; capacity?: string | number | null };
+
+export async function createBus(input: BusInput): Promise<BusEntry> {
+  const plate = cleanText(input.plate);
+  const route = cleanText(input.route);
+  const capacity = parseCapacity(input.capacity);
   if (!plate) throw new HttpError(400, 'Plate is required');
   if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
+  if (route.length > 100) throw new HttpError(400, 'Route is too long');
 
   // Two rows with the same plate would make the bus picker ambiguous.
   const existing = await listBuses();
-  const key = normalizePlate(plate);
-  const clash = existing.find((b) => normalizePlate(b.title) === key);
+  const clash = existing.find((b) => normalizePlate(b.title) === normalizePlate(plate));
   if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
 
-  const busesListId = await getBusesListId();
-  if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
+  const { busesListId, token, itemsUrl } = await busesListContext();
+  const columns = await resolveBusColumns(busesListId);
+  if (!columns.plate) {
+    throw new HttpError(500, 'Could not find the plate column in the Buses list, so nothing was saved.');
+  }
+  if (capacity != null && !columns.capacity) throw missingCapacityColumn();
 
-  // Plate column only. Title is the route number, and a new bus has no route
-  // yet; a manager sets it in SharePoint.
-  const plateColumn = await requirePlateColumn(busesListId);
-  const fields: Record<string, unknown> = { [plateColumn]: plate };
+  const fields: Record<string, unknown> = { [columns.plate]: plate };
+  if (route) fields.Title = route;
+  if (capacity != null) fields[columns.capacity] = capacity;
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
-  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(busesListId)}/items`;
-
-  const created = await graphPost<GraphListItem>(url, token, { fields });
-
+  const created = await graphPost<GraphListItem>(itemsUrl, token, { fields });
   invalidateBusesCache();
 
-  return { id: String(created?.id || '').trim(), title: plate };
+  return {
+    id: String(created?.id || '').trim(),
+    title: plate,
+    route: route || undefined,
+    capacity: capacity ?? undefined,
+  };
 }
 
-export async function updateBus(id: string, input: { plate: string }): Promise<BusEntry> {
+/**
+ * Changes only the fields that are given AND differ from what is stored.
+ * A field that is left out is never written.
+ */
+export async function updateBus(id: string, input: BusInput): Promise<BusEntry> {
   const busId = asString(id).trim();
   if (!/^\d+$/.test(busId)) throw new HttpError(400, 'Invalid bus id');
-
-  const plate = asString(input.plate).trim().replace(/\s+/g, ' ');
-  if (!plate) throw new HttpError(400, 'Plate is required');
-  if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
 
   const existing = await listBuses();
   const current = existing.find((b) => b.id === busId);
   if (!current) throw new HttpError(404, 'Bus not found');
 
-  const key = normalizePlate(plate);
-  const clash = existing.find((b) => b.id !== busId && normalizePlate(b.title) === key);
-  if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
-  if (plate === current.title) return current;
+  const fields: Record<string, unknown> = {};
+  const next: BusEntry = { ...current };
+  const { busesListId, token, itemsUrl } = await busesListContext();
+  const columns = await resolveBusColumns(busesListId);
 
-  const busesListId = await getBusesListId();
-  if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
+  if (input.plate !== undefined) {
+    const plate = cleanText(input.plate);
+    if (!plate) throw new HttpError(400, 'Plate cannot be empty');
+    if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
+    if (plate !== current.title) {
+      const clash = existing.find((b) => b.id !== busId && normalizePlate(b.title) === normalizePlate(plate));
+      if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
+      if (!columns.plate) {
+        throw new HttpError(500, 'Could not find the plate column in the Buses list, so nothing was saved.');
+      }
+      fields[columns.plate] = plate;
+      next.title = plate;
+    }
+  }
 
-  // Plate column only: Title is the route number shift names are built from.
-  const plateColumn = await requirePlateColumn(busesListId);
-  const fields: Record<string, unknown> = { [plateColumn]: plate };
+  if (input.route !== undefined) {
+    const route = cleanText(input.route);
+    if (!route) throw new HttpError(400, 'Route cannot be empty');
+    if (route.length > 100) throw new HttpError(400, 'Route is too long');
+    if (route !== asString(current.route).trim()) {
+      fields.Title = route;
+      next.route = route;
+    }
+  }
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
-  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(busesListId)}/items/${encodeURIComponent(busId)}/fields`;
+  if (input.capacity !== undefined) {
+    const capacity = parseCapacity(input.capacity);
+    if (capacity !== (current.capacity ?? null)) {
+      if (!columns.capacity) throw missingCapacityColumn();
+      fields[columns.capacity] = capacity;
+      next.capacity = capacity ?? undefined;
+    }
+  }
 
-  await graphPatch(url, token, fields);
+  if (Object.keys(fields).length === 0) return current;
 
+  await graphPatch(`${itemsUrl}/${encodeURIComponent(busId)}/fields`, token, fields);
   invalidateBusesCache();
+  return next;
+}
 
-  return { ...current, title: plate };
+/**
+ * Deletes a bus row, unless something still points at it: a shift pattern
+ * uses it as its route, a template uses it as its bus, or it is the default
+ * bus new shifts get.
+ */
+export async function deleteBus(id: string): Promise<void> {
+  const busId = asString(id).trim();
+  if (!/^\d+$/.test(busId)) throw new HttpError(400, 'Invalid bus id');
+
+  const existing = await listBuses();
+  const current = existing.find((b) => b.id === busId);
+  if (!current) throw new HttpError(404, 'Bus not found');
+  const label = current.route ? `${current.title} (route ${current.route})` : current.title;
+
+  if (optionalEnv('DEFAULT_BUS_LOOKUP_ID', '').trim() === busId) {
+    throw new HttpError(409, `${label} is the default bus for new shifts, so it cannot be deleted.`);
+  }
+
+  const { busesListId, token, itemsUrl } = await busesListContext();
+
+  // Patterns point at routes. That is this list when the Routes list is this
+  // list, or when it is not configured and so cannot be ruled out.
+  const routesListId = optionalEnv('MS_ROUTES_LIST_ID', '').trim();
+  const patterns = await listShiftPatterns({ includeInvalid: true });
+  if (!routesListId || routesListId === busesListId) {
+    const usingRoute = patterns.filter((p) => String(p.routeId || '').trim() === busId);
+    if (usingRoute.length > 0) {
+      throw new HttpError(
+        409,
+        `${label} is the route for ${usingRoute.length} shift pattern(s), so deleting it would leave ` +
+          'those shifts without a route. It was not deleted.'
+      );
+    }
+  }
+
+  const templateIds = Array.from(
+    new Set(patterns.map((p) => String(p.templateId || '').trim()).filter(Boolean))
+  );
+  const templates = await Promise.all(
+    templateIds.map((templateId) => getTemplateDefaults(templateId).catch(() => null))
+  );
+  const usingBus = templates.filter((t) => t && String(t.busLookupId ?? '') === busId).length;
+  if (usingBus > 0) {
+    throw new HttpError(
+      409,
+      `${label} is the bus on ${usingBus} shift template(s), so it cannot be deleted. It was not deleted.`
+    );
+  }
+
+  await graphDelete(`${itemsUrl}/${encodeURIComponent(busId)}`, token);
+  invalidateBusesCache();
 }
