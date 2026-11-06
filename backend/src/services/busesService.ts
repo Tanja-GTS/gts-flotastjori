@@ -213,21 +213,21 @@ export async function resolveBusTitles(params: { busIds: string[] }): Promise<Ma
 
 
 // ---------------------------------------------------------------------------
-// Creating buses
+// Creating and editing buses
 //
-// listBuses() reads the plate by probing several column names, but a write has
-// to name the column exactly. So resolve the Buses list's real plate column
-// from Graph once, and cache it. Same approach as creating drivers.
+// In the Buses list the plate is in its own column (field_1 unless
+// BUSES_FIELD_PLATE says otherwise) and Title holds the ROUTE NUMBER. Shift
+// patterns look routes up through that Title, so it is what shift names are
+// built from. Writing a plate into Title renames every shift on that route,
+// so a bus edit must only ever touch the plate column.
 // ---------------------------------------------------------------------------
 
+// Never "númer"/"number": in this list that can mean the route number.
 const PLATE_CANDIDATES = [
   'plate',
   'licenseplate',
   'license plate',
   'registration',
-  'reg',
-  'númer',
-  'numer',
   'bílnúmer',
   'bilnumer',
   'skráningarnúmer',
@@ -243,8 +243,8 @@ function isWritableColumn(col: GraphColumn): boolean {
 }
 
 /**
- * The internal name of the column that holds the plate, other than Title.
- * Empty string when the list keeps the plate in Title only.
+ * The internal name of the column that holds the plate. Never Title.
+ * Empty string when no such column exists, and then nothing may be written.
  */
 async function resolveBusPlateColumn(busesListId: string): Promise<string> {
   const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
@@ -257,27 +257,39 @@ async function resolveBusPlateColumn(busesListId: string): Promise<string> {
     graph.siteId
   )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
   const res = await graphGet<GraphColumnsResponse>(url, token);
-  const cols = (res.value || []).filter(isWritableColumn);
+  const cols = (res.value || []).filter(isWritableColumn).filter((c) => String(c.name || '') !== 'Title');
+  const has = (name: string) => cols.some((c) => String(c.name || '') === name);
 
+  // Same order listBuses() reads the plate in: configured, then field_1.
   const configured = String(getBusesFieldNames().plate || '').trim();
   let name = '';
-  if (configured && cols.some((c) => String(c.name || '') === configured)) {
+  if (configured && configured !== 'Title' && has(configured)) {
     name = configured;
+  } else if (has('field_1')) {
+    name = 'field_1';
   } else {
     const hit = cols.find((c) => {
       const internal = String(c.name || '').trim().toLowerCase();
       const display = String(c.displayName || '').trim().toLowerCase();
       return PLATE_CANDIDATES.includes(internal) || PLATE_CANDIDATES.includes(display);
     });
-    // listBuses() reads field_1 before Title, so a plate saved only to Title
-    // would show the wrong text if field_1 exists. Write to it as well.
-    const field1 = cols.find((c) => String(c.name || '') === 'field_1');
-    name = String(hit?.name || field1?.name || '').trim();
+    name = String(hit?.name || '').trim();
   }
-  if (name === 'Title') name = '';
 
   plateColumnCache = { fetchedAtMs: now, name };
   return name;
+}
+
+async function requirePlateColumn(busesListId: string): Promise<string> {
+  const plateColumn = await resolveBusPlateColumn(busesListId);
+  if (!plateColumn) {
+    throw new HttpError(
+      500,
+      'Could not find the plate column in the Buses list, so nothing was saved. ' +
+        'Set BUSES_FIELD_PLATE to its internal column name.'
+    );
+  }
+  return plateColumn;
 }
 
 function normalizePlate(raw: unknown): string {
@@ -304,9 +316,10 @@ export async function createBus(input: { plate: string }): Promise<BusEntry> {
   const busesListId = await getBusesListId();
   if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
 
-  const plateColumn = await resolveBusPlateColumn(busesListId);
-  const fields: Record<string, unknown> = { Title: plate };
-  if (plateColumn) fields[plateColumn] = plate;
+  // Plate column only. Title is the route number, and a new bus has no route
+  // yet; a manager sets it in SharePoint.
+  const plateColumn = await requirePlateColumn(busesListId);
+  const fields: Record<string, unknown> = { [plateColumn]: plate };
 
   const graph = getGraphConfig();
   const token = await getGraphAppToken(graph);
@@ -341,9 +354,9 @@ export async function updateBus(id: string, input: { plate: string }): Promise<B
   const busesListId = await getBusesListId();
   if (!busesListId) throw new HttpError(500, 'Could not determine the Buses list id');
 
-  const plateColumn = await resolveBusPlateColumn(busesListId);
-  const fields: Record<string, unknown> = { Title: plate };
-  if (plateColumn) fields[plateColumn] = plate;
+  // Plate column only: Title is the route number shift names are built from.
+  const plateColumn = await requirePlateColumn(busesListId);
+  const fields: Record<string, unknown> = { [plateColumn]: plate };
 
   const graph = getGraphConfig();
   const token = await getGraphAppToken(graph);
