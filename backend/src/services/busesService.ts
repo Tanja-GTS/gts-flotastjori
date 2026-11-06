@@ -129,7 +129,8 @@ export type BusFieldKey = 'route' | 'plate' | 'busNumber' | 'type' | 'capacity';
 type BusFieldSpec = {
   key: BusFieldKey;
   names: string[]; // column names that mean this field, compared loosely
-  number?: boolean;
+  number?: boolean; // a whole number from 1 to max
+  max?: number;
   configuredEnv?: string; // an env var that names the column outright
   fallback?: string; // internal name to use when no column has a matching name
 };
@@ -143,12 +144,19 @@ const BUS_FIELDS: BusFieldSpec[] = [
     // Where plates have always been kept in this list.
     fallback: 'field_1',
   },
-  { key: 'busNumber', names: ['vagn númer', 'vagnnúmer', 'vagn nr', 'vagnnr', 'bus number', 'busnumber'] },
+  // The bus's own fleet number: a whole number, nothing else.
+  {
+    key: 'busNumber',
+    names: ['vagn númer', 'vagnnúmer', 'vagn nr', 'vagnnr', 'bus number', 'busnumber'],
+    number: true,
+    max: 99999,
+  },
   { key: 'type', names: ['tegund', 'type', 'model', 'gerð'] },
   {
     key: 'capacity',
     names: ['capacity', 'seats', 'sæti', 'sætafjöldi', 'fjöldi sæta', 'farþegafjöldi'],
     number: true,
+    max: 300,
     configuredEnv: 'BUSES_FIELD_CAPACITY',
   },
 ];
@@ -465,8 +473,8 @@ function parseFieldValue(spec: BusFieldSpec, raw: unknown): string | number | nu
   const text = asString(raw).trim().replace(/\s+/g, ' ');
   if (!text) return null;
   if (spec.number) {
-    const n = Number(text);
-    if (!Number.isInteger(n) || n < 1 || n > 300) {
+    const n = /^\d+$/.test(text) ? Number(text) : NaN;
+    if (!Number.isInteger(n) || n < 1 || n > (spec.max ?? 300)) {
       throw new HttpError(400, `${FIELD_LABELS[spec.key]} must be a whole number`);
     }
     return n;

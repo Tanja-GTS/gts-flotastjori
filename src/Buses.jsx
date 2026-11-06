@@ -11,7 +11,7 @@ import './drivers.css';
 const FIELDS = [
   { key: 'route' },
   { key: 'plate' },
-  { key: 'busNumber' },
+  { key: 'busNumber', numeric: true },
   { key: 'type' },
   { key: 'capacity', optional: true, numeric: true },
 ];
