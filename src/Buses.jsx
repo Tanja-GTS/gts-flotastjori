@@ -1,129 +1,168 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Group, Modal, Table, Text, TextInput, Title } from '@mantine/core';
 import { useI18n } from './i18n';
-import { createBus, deleteBus, updateBus } from './data/backendApi';
+import { createBus, deleteBus, fetchBusesPage, updateBus } from './data/backendApi';
 // Same layout as the Drivers page, so reuse its styles.
 import './drivers.css';
 
-const emptyForm = { route: '', plate: '', capacity: '' };
+// Every field the page knows. Capacity only shows when SharePoint has the
+// column; the others always show, so a missing column is visible.
+const FIELDS = [
+  { key: 'route' },
+  { key: 'plate' },
+  { key: 'busNumber' },
+  { key: 'type' },
+  { key: 'capacity', optional: true, numeric: true },
+];
 
-function formFromBus(bus) {
-  return {
-    route: String(bus?.route || '').trim(),
-    plate: String(bus?.title || '').trim(),
-    capacity: bus?.capacity == null ? '' : String(bus.capacity),
-  };
+const NEW_ROW = '__new__';
+
+function valuesOf(bus) {
+  const out = {};
+  for (const f of FIELDS) out[f.key] = bus?.[f.key] == null ? '' : String(bus[f.key]);
+  return out;
 }
 
 function busLabel(bus) {
-  const plate = String(bus?.title || '').trim();
+  const name = String(bus?.plate || bus?.busNumber || bus?.title || '').trim();
   const route = String(bus?.route || '').trim();
-  return route ? `${plate} (${route})` : plate;
+  return route ? `${name} (${route})` : name;
 }
 
-export default function Buses({ busOptions = [], onReload }) {
+export default function Buses({ onReload }) {
   const { t, locale } = useI18n();
 
-  const [opened, setOpened] = useState(false);
-  // The bus being changed, or null while adding a new one.
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [buses, setBuses] = useState(null);
+  const [columns, setColumns] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  // The row being edited: a bus id, NEW_ROW for a new bus, or null.
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [rowError, setRowError] = useState('');
   const [note, setNote] = useState('');
 
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  const isEditing = editing != null;
-  const original = isEditing ? formFromBus(editing) : emptyForm;
-
-  // Only the fields that differ from what is stored.
-  const changes = useMemo(() => {
-    if (!isEditing) return {};
-    const out = {};
-    for (const key of Object.keys(emptyForm)) {
-      if (form[key].trim() !== original[key]) out[key] = form[key].trim();
+  const load = useCallback(async ({ fresh = false } = {}) => {
+    setLoadError('');
+    try {
+      const data = await fetchBusesPage({ fresh });
+      setBuses(data.buses);
+      setColumns(data.columns);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
     }
-    return out;
-  }, [isEditing, form, original]);
+  }, []);
 
-  const routeChanged = isEditing && 'route' in changes;
-  const canSave =
-    !saving && form.plate.trim().length > 0 && (!isEditing || Object.keys(changes).length > 0);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const setField = (key) => (e) => {
-    // Read the value now: React clears currentTarget once the handler returns.
-    const value = e.target.value;
-    setForm((f) => ({ ...f, [key]: value }));
-    setError('');
-    setNote('');
-  };
-
-  function openAdd() {
-    setEditing(null);
-    setForm(emptyForm);
-    setError('');
-    setNote('');
-    setOpened(true);
-  }
-
-  function openEdit(bus) {
-    setEditing(bus);
-    setForm(formFromBus(bus));
-    setError('');
-    setNote('');
-    setOpened(true);
-  }
-
-  function closeForm() {
-    if (saving) return;
-    setOpened(false);
-    setEditing(null);
-    setForm(emptyForm);
-    setError('');
-  }
-
-  async function reload(fresh) {
-    if (onReload) await onReload({ fresh });
+  // After a change: re-read this page, and the bus picker on the shift board.
+  async function reloadAll() {
+    await load({ fresh: true });
+    if (onReload) await onReload({ fresh: false });
   }
 
   async function handleRefresh() {
     setRefreshing(true);
     try {
-      await reload(true);
+      await load({ fresh: true });
+      if (onReload) await onReload({ fresh: false });
     } finally {
       setRefreshing(false);
     }
   }
 
+  const hasColumn = (key) => (columns ? Boolean(columns[key]) : true);
+  const visibleFields = FIELDS.filter((f) => !f.optional || (columns && columns[f.key]));
+  const missingNames = columns
+    ? FIELDS.filter((f) => !f.optional && !columns[f.key]).map((f) => t(`buses.field.${f.key}`))
+    : [];
+
+  const rows = useMemo(() => {
+    const collator = new Intl.Collator(locale || undefined, { sensitivity: 'base', numeric: true });
+    return (buses || [])
+      .slice()
+      .sort(
+        (a, b) =>
+          collator.compare(String(a.route || ''), String(b.route || '')) ||
+          collator.compare(String(a.plate || a.title || ''), String(b.plate || b.title || ''))
+      );
+  }, [buses, locale]);
+
+  const editingBus = editingId && editingId !== NEW_ROW ? rows.find((b) => b.id === editingId) : null;
+  const original = editingId === NEW_ROW ? valuesOf(null) : valuesOf(editingBus);
+
+  // Only the fields the manager actually changed.
+  const changes = {};
+  if (editingId) {
+    for (const f of FIELDS) {
+      const value = String(draft[f.key] ?? '').trim();
+      if (value !== original[f.key].trim()) changes[f.key] = value;
+    }
+  }
+  const canSave = !saving && Object.keys(changes).length > 0;
+
+  function startEdit(bus) {
+    setEditingId(bus.id);
+    setDraft(valuesOf(bus));
+    setRowError('');
+    setNote('');
+  }
+
+  function startAdd() {
+    setEditingId(NEW_ROW);
+    setDraft(valuesOf(null));
+    setRowError('');
+    setNote('');
+  }
+
+  function cancelEdit() {
+    if (saving) return;
+    setEditingId(null);
+    setDraft({});
+    setRowError('');
+  }
+
+  const setField = (key) => (e) => {
+    // Read the value now: React clears currentTarget once the handler returns.
+    const value = e.target.value;
+    setDraft((d) => ({ ...d, [key]: value }));
+    setRowError('');
+  };
+
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
-    setError('');
-    setNote('');
+    setRowError('');
     try {
-      const saved = isEditing
-        ? await updateBus(String(editing.value), changes)
-        : await createBus({
-            plate: form.plate.trim(),
-            route: form.route.trim(),
-            capacity: form.capacity.trim(),
-          });
-      const label = isEditing ? t('buses.edit.saved') : t('buses.add.saved');
-      setNote(`${label} ${busLabel(saved) || form.plate.trim()}`);
-      setOpened(false);
-      setEditing(null);
-      setForm(emptyForm);
-      await reload(true);
+      const saved =
+        editingId === NEW_ROW ? await createBus(changes) : await updateBus(editingId, changes);
+      const label = editingId === NEW_ROW ? t('buses.add.saved') : t('buses.edit.saved');
+      setNote(`${label} ${busLabel(saved)}`);
+      setEditingId(null);
+      setDraft({});
+      await reloadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setRowError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      cancelEdit();
     }
   }
 
@@ -144,10 +183,10 @@ export default function Buses({ busOptions = [], onReload }) {
     setDeleteBusy(true);
     setDeleteError('');
     try {
-      await deleteBus(String(deleting.value));
+      await deleteBus(deleting.id);
       setNote(`${t('buses.delete.done')} ${busLabel(deleting)}`);
       setDeleting(null);
-      await reload(true);
+      await reloadAll();
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -155,17 +194,50 @@ export default function Buses({ busOptions = [], onReload }) {
     }
   }
 
-  const rows = useMemo(() => {
-    const collator = new Intl.Collator(locale || undefined, { sensitivity: 'base', numeric: true });
-    return (busOptions || [])
-      .filter((b) => b && String(b.value || '').trim())
-      .slice()
-      .sort(
-        (a, b) =>
-          collator.compare(String(a.route || ''), String(b.route || '')) ||
-          collator.compare(String(a.title || ''), String(b.title || ''))
-      );
-  }, [busOptions, locale]);
+  const columnCount = visibleFields.length + 1;
+
+  function renderEditRow(key) {
+    return (
+      <React.Fragment key={key}>
+        <Table.Tr className="busesRow--editing">
+          {visibleFields.map((f) => (
+            <Table.Td key={f.key}>
+              <TextInput
+                size="xs"
+                aria-label={t(`buses.field.${f.key}`)}
+                value={draft[f.key] ?? ''}
+                onChange={setField(f.key)}
+                onKeyDown={onKeyDown}
+                disabled={!hasColumn(f.key) || saving}
+                placeholder={hasColumn(f.key) ? '' : t('buses.noColumn')}
+                inputMode={f.numeric ? 'numeric' : undefined}
+                autoFocus={f.key === 'route'}
+              />
+            </Table.Td>
+          ))}
+          <Table.Td className="driversTable__actionCol">
+            <Group gap={4} wrap="nowrap" justify="flex-end">
+              <Button size="compact-sm" onClick={handleSave} loading={saving} disabled={!canSave}>
+                {t('buses.edit.save')}
+              </Button>
+              <Button size="compact-sm" variant="default" onClick={cancelEdit} disabled={saving}>
+                {t('common.cancel')}
+              </Button>
+            </Group>
+          </Table.Td>
+        </Table.Tr>
+        {rowError && (
+          <Table.Tr>
+            <Table.Td colSpan={columnCount}>
+              <div role="alert" style={{ fontSize: 13, color: '#b00020', fontWeight: 600 }}>
+                {rowError}
+              </div>
+            </Table.Td>
+          </Table.Tr>
+        )}
+      </React.Fragment>
+    );
+  }
 
   return (
     <div className="driversPage">
@@ -182,7 +254,9 @@ export default function Buses({ busOptions = [], onReload }) {
       </Title>
 
       <Group className="driversActions">
-        <Button onClick={openAdd}>{t('buses.add.title')}</Button>
+        <Button onClick={startAdd} disabled={editingId != null || buses == null}>
+          {t('buses.add.button')}
+        </Button>
         <Button variant="default" onClick={handleRefresh} loading={refreshing}>
           {t('buses.refresh')}
         </Button>
@@ -194,57 +268,17 @@ export default function Buses({ busOptions = [], onReload }) {
         </div>
       )}
 
-      <Modal
-        opened={opened}
-        onClose={closeForm}
-        title={isEditing ? t('buses.edit.title') : t('buses.add.title')}
-        centered
-      >
-        <form
-          className="driversAddForm"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }}
-        >
-          <TextInput label={t('buses.add.route')} value={form.route} onChange={setField('route')} data-autofocus />
-          <TextInput
-            label={t('buses.add.plate')}
-            value={form.plate}
-            onChange={setField('plate')}
-            placeholder={t('buses.add.platePlaceholder')}
-            required
-          />
-          <TextInput
-            label={t('buses.add.capacity')}
-            value={form.capacity}
-            onChange={setField('capacity')}
-            placeholder={t('buses.add.capacityPlaceholder')}
-            inputMode="numeric"
-          />
-        </form>
+      {missingNames.length > 0 && (
+        <div className="busesNotice" role="status">
+          {t('buses.missingColumns', { names: missingNames.join(', ') })}
+        </div>
+      )}
 
-        {routeChanged && (
-          <Text size="sm" c="orange.8" fw={600} mt="sm">
-            {t('buses.edit.routeWarning')}
-          </Text>
-        )}
-
-        {error && (
-          <div role="alert" style={{ marginTop: 10, fontSize: 13, color: '#b00020', fontWeight: 600 }}>
-            {error}
-          </div>
-        )}
-
-        <Group justify="flex-end" mt="lg">
-          <Button variant="default" onClick={closeForm} disabled={saving}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={handleSave} loading={saving} disabled={!canSave}>
-            {isEditing ? t('buses.edit.submit') : t('buses.add.submit')}
-          </Button>
-        </Group>
-      </Modal>
+      {loadError && (
+        <div role="alert" className="busesNotice busesNotice--error">
+          {loadError}
+        </div>
+      )}
 
       <Modal opened={deleting != null} onClose={closeDelete} title={t('buses.delete.title')} centered>
         <Text size="sm">{t('buses.delete.confirm', { bus: busLabel(deleting) })}</Text>
@@ -265,39 +299,62 @@ export default function Buses({ busOptions = [], onReload }) {
         </Group>
       </Modal>
 
-      <div className="driversTableWrap">
+      <div className="driversTableWrap busesTableWrap">
         <Table striped highlightOnHover withTableBorder withColumnBorders>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>{t('buses.table.route')}</Table.Th>
-              <Table.Th>{t('buses.table.plate')}</Table.Th>
-              <Table.Th>{t('buses.table.capacity')}</Table.Th>
+              {visibleFields.map((f) => (
+                <Table.Th key={f.key}>{t(`buses.field.${f.key}`)}</Table.Th>
+              ))}
               <Table.Th className="driversTable__actionCol" aria-label={t('buses.edit.button')} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.length === 0 ? (
+            {editingId === NEW_ROW && renderEditRow(NEW_ROW)}
+
+            {buses == null && !loadError && (
               <Table.Tr>
-                <Table.Td colSpan={4}>{t('buses.empty')}</Table.Td>
+                <Table.Td colSpan={columnCount}>{t('buses.loading')}</Table.Td>
               </Table.Tr>
-            ) : (
-              rows.map((b) => (
-                <Table.Tr key={String(b.value)}>
-                  <Table.Td>{String(b.route || '').trim()}</Table.Td>
-                  <Table.Td>{String(b.title || '').trim()}</Table.Td>
-                  <Table.Td>{b.capacity == null ? '' : b.capacity}</Table.Td>
+            )}
+
+            {buses != null && rows.length === 0 && editingId !== NEW_ROW && (
+              <Table.Tr>
+                <Table.Td colSpan={columnCount}>{t('buses.empty')}</Table.Td>
+              </Table.Tr>
+            )}
+
+            {rows.map((b) =>
+              editingId === b.id ? (
+                renderEditRow(b.id)
+              ) : (
+                <Table.Tr key={b.id}>
+                  {visibleFields.map((f) => (
+                    <Table.Td key={f.key}>{b[f.key] == null ? '' : String(b[f.key])}</Table.Td>
+                  ))}
                   <Table.Td className="driversTable__actionCol">
                     <Group gap={4} wrap="nowrap" justify="flex-end">
-                      <Button size="compact-sm" variant="subtle" onClick={() => openEdit(b)}>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        onClick={() => startEdit(b)}
+                        disabled={editingId != null}
+                      >
                         {t('buses.edit.button')}
                       </Button>
-                      <Button size="compact-sm" variant="subtle" color="red" onClick={() => openDelete(b)}>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => openDelete(b)}
+                        disabled={editingId != null}
+                      >
                         {t('buses.delete.button')}
                       </Button>
                     </Group>
                   </Table.Td>
                 </Table.Tr>
-              ))
+              )
             )}
           </Table.Tbody>
         </Table>

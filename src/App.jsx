@@ -220,8 +220,6 @@ export default function App() {
           : b.title,
         title: b.title,
         routeLabel: b.routeLabel || '',
-        route: b.route || '',
-        capacity: b.capacity ?? null,
         id: b.id,
       }))
       .filter((o) => o.value);
@@ -544,7 +542,7 @@ export default function App() {
         />
         <Route
           path="/buses"
-          element={<Buses busOptions={busOptions} onReload={reloadBuses} />}
+          element={<Buses onReload={reloadBuses} />}
         />
         <Route
           path="/confirm-shift"

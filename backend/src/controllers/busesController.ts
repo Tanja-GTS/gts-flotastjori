@@ -2,13 +2,26 @@ import type { Request, Response } from 'express';
 import {
   createBus,
   deleteBus,
+  getBusColumnsInfo,
   invalidateBusesCache,
   listBuses,
   updateBus,
+  type BusFieldKey,
   type BusInput,
 } from '../services/busesService';
 import { cacheGetOrSet, cacheInvalidatePrefix } from '../services/simpleCache';
 import { sendApiError } from './apiError';
+
+const BUS_FIELD_KEYS: BusFieldKey[] = ['route', 'plate', 'busNumber', 'type', 'capacity'];
+
+/** Only the bus fields present in the body: a field left out is not touched. */
+function busInputFromBody(body: Record<string, unknown>): BusInput {
+  const input: BusInput = {};
+  for (const key of BUS_FIELD_KEYS) {
+    if (body[key] !== undefined) input[key] = body[key] == null ? '' : String(body[key]);
+  }
+  return input;
+}
 
 const BUSES_TTL_MS = Number(process.env.CACHE_BUSES_TTL_MS || 10 * 60 * 1000);
 
@@ -24,8 +37,14 @@ export async function getBuses(req: Request, res: Response) {
       ttlMs: BUSES_TTL_MS,
       factory: () => listBuses(),
     });
-    // buses now includes routeId and routeLabel
-    res.json({ ok: true, buses });
+    // Which fields have a column in SharePoint, so the page shows only those.
+    let columns: Record<BusFieldKey, boolean> | null = null;
+    try {
+      columns = await getBusColumnsInfo();
+    } catch {
+      columns = null;
+    }
+    res.json({ ok: true, buses, columns });
   } catch (err) {
     sendApiError(res, err);
   }
@@ -34,11 +53,7 @@ export async function getBuses(req: Request, res: Response) {
 export async function postBus(req: Request, res: Response) {
   try {
     const body = (req.body || {}) as Record<string, unknown>;
-    const bus = await createBus({
-      plate: String(body.plate ?? ''),
-      route: String(body.route ?? ''),
-      capacity: body.capacity == null ? '' : String(body.capacity),
-    });
+    const bus = await createBus(busInputFromBody(body));
 
     // The buses list is cached by the controller too, and shifts embed bus
     // plates, so clear both or the new bus will not show up for minutes.
@@ -54,12 +69,7 @@ export async function postBus(req: Request, res: Response) {
 export async function patchBus(req: Request, res: Response) {
   try {
     const body = (req.body || {}) as Record<string, unknown>;
-    // Pass on only the fields that were sent: a field left out is not changed.
-    const input: BusInput = {};
-    if (body.plate !== undefined) input.plate = String(body.plate ?? '');
-    if (body.route !== undefined) input.route = String(body.route ?? '');
-    if (body.capacity !== undefined) input.capacity = body.capacity == null ? '' : String(body.capacity);
-    const bus = await updateBus(String(req.params.id ?? ''), input);
+    const bus = await updateBus(String(req.params.id ?? ''), busInputFromBody(body));
 
     // Shifts embed bus plates, so clear them with the list.
     cacheInvalidatePrefix('buses');

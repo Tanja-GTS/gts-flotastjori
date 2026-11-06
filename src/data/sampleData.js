@@ -245,7 +245,15 @@ export async function sampleResponse(url, init) {
     case '/api/drivers':
       return { ok: true, drivers: DRIVERS.map((d) => ({ ...d, email: '', phone: '' })) };
     case '/api/buses':
-      return { ok: true, buses: [{ id: 'b1', title: 'AB-123' }, { id: 'b2', title: 'CD-456' }] };
+      return {
+        ok: true,
+        buses: [
+          { id: 'b1', title: 'AB-123', route: '51', plate: 'AB-123', busNumber: '12', type: 'Volvo 9700' },
+          { id: 'b2', title: 'CD-456', route: '52', plate: 'CD-456' },
+        ],
+        // Tegund missing on purpose, so the preview shows the missing-column notice.
+        columns: { route: true, plate: true, busNumber: true, type: false, capacity: false },
+      };
     default:
       throw new Error(`Sample data preview: no sample for ${u.pathname}`);
   }

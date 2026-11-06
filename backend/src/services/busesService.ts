@@ -112,18 +112,158 @@ export async function getBusesListId(): Promise<string> {
   return inferBusesListIdFromSiteLists();
 }
 
+// ---------------------------------------------------------------------------
+// Bus fields
+//
+// Each row is a bus. The page shows and edits these fields, each kept in its
+// own column, found by the column's name in SharePoint:
+//   Route, Plate, Vagn Númer, Tegund (and Capacity, only if that column exists)
+// Title is NEVER written by a change: it holds the route number that shift
+// patterns look up, so it is what shift names are built from. Writing to it
+// renamed shifts once (2026-11-06); it must not happen again.
+// ---------------------------------------------------------------------------
+
+export type BusFieldKey = 'route' | 'plate' | 'busNumber' | 'type' | 'capacity';
+
+type BusFieldSpec = {
+  key: BusFieldKey;
+  names: string[]; // column names that mean this field, compared loosely
+  number?: boolean;
+  configuredEnv?: string; // an env var that names the column outright
+  fallback?: string; // internal name to use when no column has a matching name
+};
+
+const BUS_FIELDS: BusFieldSpec[] = [
+  { key: 'route', names: ['route', 'leið', 'leid'] },
+  {
+    key: 'plate',
+    names: ['plate', 'bílnúmer', 'license plate', 'licenseplate', 'registration', 'skráningarnúmer'],
+    configuredEnv: 'BUSES_FIELD_PLATE',
+    // Where plates have always been kept in this list.
+    fallback: 'field_1',
+  },
+  { key: 'busNumber', names: ['vagn númer', 'vagnnúmer', 'vagn nr', 'vagnnr', 'bus number', 'busnumber'] },
+  { key: 'type', names: ['tegund', 'type', 'model', 'gerð'] },
+  {
+    key: 'capacity',
+    names: ['capacity', 'seats', 'sæti', 'sætafjöldi', 'fjöldi sæta', 'farþegafjöldi'],
+    number: true,
+    configuredEnv: 'BUSES_FIELD_CAPACITY',
+  },
+];
+
+/** Lower case, no accents, no dots, single spaces: "Vagn Númer" -> "vagn numer". */
+function looseName(raw: unknown): string {
+  return String(raw ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ð/gi, 'd')
+    .replace(/þ/gi, 'th')
+    .replace(/æ/gi, 'ae')
+    .replace(/\./g, '')
+    .replace(/[_\s]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+export type BusColumns = Partial<Record<BusFieldKey, string>>;
+let busColumnsCache: { fetchedAtMs: number; listId: string; cols: BusColumns } | null = null;
+
+function isWritableColumn(col: GraphColumn): boolean {
+  if ((col as any).readOnly === true) return false;
+  if ((col as any).hidden === true) return false;
+  // A lookup is written through <name>LookupId with a row id, not as text.
+  if (col.lookup) return false;
+  return String(col.name || '') !== 'Title';
+}
+
+/** Internal column name for each field that has a column. Never Title. */
+async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
+  const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
+  const now = Date.now();
+  if (busColumnsCache && busColumnsCache.listId === busesListId && now - busColumnsCache.fetchedAtMs < ttlMs) {
+    return busColumnsCache.cols;
+  }
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
+  const res = await graphGet<GraphColumnsResponse>(url, token);
+  const cols = (res.value || []).filter(isWritableColumn);
+
+  const result: BusColumns = {};
+  const used = new Set<string>();
+  const take = (key: BusFieldKey, name: string) => {
+    result[key] = name;
+    used.add(name);
+  };
+
+  // 1) An env var that names the column outright.
+  for (const spec of BUS_FIELDS) {
+    const configured = spec.configuredEnv ? optionalEnv(spec.configuredEnv, '').trim() : '';
+    if (configured && cols.some((c) => String(c.name || '') === configured) && !used.has(configured)) {
+      take(spec.key, configured);
+    }
+  }
+  // 2) A column whose name (shown or internal) matches.
+  for (const spec of BUS_FIELDS) {
+    if (result[spec.key]) continue;
+    const wanted = spec.names.map(looseName);
+    const hit = cols.find((c) => {
+      const internal = String(c.name || '').trim();
+      if (!internal || used.has(internal)) return false;
+      return wanted.includes(looseName(c.displayName)) || wanted.includes(looseName(internal));
+    });
+    if (hit) take(spec.key, String(hit.name).trim());
+  }
+  // 3) The long-standing fallback (field_1 for the plate).
+  for (const spec of BUS_FIELDS) {
+    if (result[spec.key] || !spec.fallback) continue;
+    if (cols.some((c) => String(c.name || '') === spec.fallback) && !used.has(spec.fallback)) {
+      take(spec.key, spec.fallback);
+    }
+  }
+
+  busColumnsCache = { fetchedAtMs: now, listId: busesListId, cols: result };
+  return result;
+}
+
+/** Which fields have a column in SharePoint, so the page can show them. */
+export async function getBusColumnsInfo(): Promise<Record<BusFieldKey, boolean>> {
+  const busesListId = await getBusesListId();
+  const cols = busesListId ? await resolveBusColumns(busesListId) : {};
+  const info = {} as Record<BusFieldKey, boolean>;
+  for (const spec of BUS_FIELDS) info[spec.key] = Boolean(cols[spec.key]);
+  return info;
+}
+
 type BusEntry = {
   id: string;
-  title: string; // the plate
+  // What shift cards and the bus picker show: the plate, or Title when a row
+  // has no plate.
+  title: string;
   routeId?: string;
   routeLabel?: string;
-  // Title of the row. Shift patterns look routes up through it, so it is
-  // what shift names are built from.
   route?: string;
+  plate?: string;
+  busNumber?: string;
+  type?: string;
   capacity?: number;
 };
 let busesCache: { fetchedAtMs: number; items: BusEntry[] } | null = null;
 let busesFetchInProgress: Promise<BusEntry[]> | null = null;
+
+function readField(spec: BusFieldSpec, raw: unknown): string | number | undefined {
+  if (raw == null || raw === '') return undefined;
+  if (spec.number) {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  const text = asString(raw).trim();
+  return text || undefined;
+}
 
 export async function listBuses(): Promise<BusEntry[]> {
   const ttlMs = Number(optionalEnv('BUSES_CACHE_TTL_MS', '300000')) || 300000;
@@ -152,18 +292,20 @@ export async function listBuses(): Promise<BusEntry[]> {
         nextUrl = page['@odata.nextLink'];
       }
 
-      const busFields = getBusesFieldNames();
-      // Only needed for capacity; a failure here must not break the bus list.
-      let capacityColumn = '';
+      // A failure here must not break the bus list shift cards depend on.
+      let columns: BusColumns = {};
       try {
-        capacityColumn = (await resolveBusColumns(busesListId)).capacity;
+        columns = await resolveBusColumns(busesListId);
       } catch {
-        capacityColumn = '';
+        columns = {};
       }
+
+      const busFields = getBusesFieldNames();
       const busIdToTitle = new Map<string, string>();
       for (const item of allItems) {
         const f = item.fields || {};
         const title =
+          (columns.plate ? asString(f[columns.plate]) : '') ||
           (busFields.plate ? asString(f[busFields.plate]) : '') ||
           asString(f.field_1) ||
           asString(f.Plate) ||
@@ -195,17 +337,19 @@ export async function listBuses(): Promise<BusEntry[]> {
           const routeLabel = routeIdToLabel.get(routeId) || '';
           const title = busIdToTitle.get(id) || id;
           if (debugEnabled) debug.push({id, title, routeId, routeLabel, fields});
-          const route = asString(fields.Title).trim();
-          const capacityRaw = capacityColumn ? fields[capacityColumn] : undefined;
-          const capacity = capacityRaw == null || capacityRaw === '' ? NaN : Number(capacityRaw);
-          return {
+          const entry: BusEntry = {
             id,
             title,
             routeId: routeId || undefined,
             routeLabel: routeLabel || undefined,
-            route: route || undefined,
-            capacity: Number.isFinite(capacity) ? capacity : undefined,
           };
+          for (const spec of BUS_FIELDS) {
+            const column = columns[spec.key];
+            if (!column) continue;
+            const value = readField(spec, fields[column]);
+            if (value !== undefined) (entry as any)[spec.key] = value;
+          }
+          return entry;
         })
         .filter((b) => b.id);
       if (debugEnabled) {
@@ -222,9 +366,7 @@ export async function listBuses(): Promise<BusEntry[]> {
 }
 
 /**
- * Resolves bus lookup IDs -> bus Title (plate).
- *
- * Requires MS_BUSES_LIST_ID. If not set, returns an empty map.
+ * Resolves bus lookup IDs -> the label shift cards show (the plate).
  */
 export async function resolveBusTitles(params: { busIds: string[] }): Promise<Map<string, string>> {
   const uniqueIds = Array.from(new Set(params.busIds.map((s) => String(s).trim()).filter(Boolean)));
@@ -239,113 +381,20 @@ export async function resolveBusTitles(params: { busIds: string[] }): Promise<Ma
   return map;
 }
 
-
 // ---------------------------------------------------------------------------
 // Adding, changing and deleting buses
-//
-// Each row is a bus: plate in its own column (field_1 unless
-// BUSES_FIELD_PLATE says otherwise), capacity in a Capacity column, and
-// Title holds the ROUTE number. Shift patterns look routes up through that
-// Title, so changing Route renames the shifts on that route, and deleting a
-// row a pattern uses would leave those shifts without a route. So:
-// - a change writes only the fields that actually changed;
-// - the plate never goes into Title;
-// - a row still used by a pattern, a template, or as the default bus cannot
-//   be deleted.
 // ---------------------------------------------------------------------------
 
-const PLATE_CANDIDATES = [
-  'plate',
-  'licenseplate',
-  'license plate',
-  'registration',
-  'bílnúmer',
-  'bilnumer',
-  'skráningarnúmer',
-  'skraningarnumer',
-];
-
-const CAPACITY_CANDIDATES = [
-  'capacity',
-  'seats',
-  'seat capacity',
-  'sæti',
-  'saeti',
-  'sætafjöldi',
-  'saetafjoldi',
-  'fjöldi sæta',
-  'farþegafjöldi',
-  'farthegafjoldi',
-];
-
-type BusColumns = { plate: string; capacity: string };
-let busColumnsCache: { fetchedAtMs: number; listId: string; cols: BusColumns } | null = null;
-
-function isWritableColumn(col: GraphColumn): boolean {
-  if ((col as any).readOnly === true) return false;
-  if ((col as any).hidden === true) return false;
-  return true;
-}
-
-/** Internal names of the plate and capacity columns. Never Title; '' when missing. */
-async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
-  const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
-  const now = Date.now();
-  if (busColumnsCache && busColumnsCache.listId === busesListId && now - busColumnsCache.fetchedAtMs < ttlMs) {
-    return busColumnsCache.cols;
-  }
-
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
-  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
-  const res = await graphGet<GraphColumnsResponse>(url, token);
-  const cols = (res.value || []).filter(isWritableColumn).filter((c) => String(c.name || '') !== 'Title');
-  const has = (name: string) => Boolean(name) && name !== 'Title' && cols.some((c) => String(c.name || '') === name);
-  const byName = (candidates: string[], except: string) =>
-    String(
-      cols.find((c) => {
-        const internal = String(c.name || '').trim();
-        if (!internal || internal === except) return false;
-        const display = String(c.displayName || '').trim().toLowerCase();
-        return candidates.includes(internal.toLowerCase()) || candidates.includes(display);
-      })?.name || ''
-    ).trim();
-
-  // Plate: same order listBuses() reads it in — configured, then field_1.
-  const configured = getBusesFieldNames();
-  let plate = '';
-  if (has(String(configured.plate || '').trim())) plate = String(configured.plate).trim();
-  else if (has('field_1')) plate = 'field_1';
-  else plate = byName(PLATE_CANDIDATES, '');
-
-  let capacity = '';
-  if (has(String(configured.capacity || '').trim())) capacity = String(configured.capacity).trim();
-  else capacity = byName(CAPACITY_CANDIDATES, plate);
-
-  const result = { plate, capacity };
-  busColumnsCache = { fetchedAtMs: now, listId: busesListId, cols: result };
-  return result;
-}
+const FIELD_LABELS: Record<BusFieldKey, string> = {
+  route: 'Route',
+  plate: 'Plate',
+  busNumber: 'Vagn Númer',
+  type: 'Tegund',
+  capacity: 'Capacity',
+};
 
 function normalizePlate(raw: unknown): string {
   return asString(raw).trim().replace(/[\s-]+/g, '').toUpperCase();
-}
-
-function cleanText(raw: unknown): string {
-  return asString(raw).trim().replace(/\s+/g, ' ');
-}
-
-/** '' clears it; otherwise a whole number of seats. */
-function parseCapacity(raw: unknown): number | null {
-  const text = asString(raw).trim();
-  if (!text) return null;
-  const n = Number(text);
-  if (!Number.isInteger(n) || n < 1 || n > 300) {
-    throw new HttpError(400, 'Capacity must be a whole number of seats');
-  }
-  return n;
 }
 
 export function invalidateBusesCache(): void {
@@ -364,54 +413,76 @@ async function busesListContext() {
   return { busesListId, token, itemsUrl };
 }
 
-function missingCapacityColumn(): HttpError {
+export type BusInput = Partial<Record<BusFieldKey, unknown>>;
+
+/** The value to store: null clears the field. Throws on bad input. */
+function parseFieldValue(spec: BusFieldSpec, raw: unknown): string | number | null {
+  const text = asString(raw).trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  if (spec.number) {
+    const n = Number(text);
+    if (!Number.isInteger(n) || n < 1 || n > 300) {
+      throw new HttpError(400, `${FIELD_LABELS[spec.key]} must be a whole number`);
+    }
+    return n;
+  }
+  if (text.length > 100) throw new HttpError(400, `${FIELD_LABELS[spec.key]} is too long`);
+  return text;
+}
+
+function missingColumn(key: BusFieldKey): HttpError {
   return new HttpError(
-    500,
-    'The Buses list has no Capacity column yet, so capacity was not saved. ' +
-      'Add a Number column named "Capacity" to the Buses list in SharePoint.'
+    400,
+    `The Buses list has no "${FIELD_LABELS[key]}" column yet, so it was not saved. ` +
+      `Add a column named "${FIELD_LABELS[key]}" to the Buses list in SharePoint.`
   );
 }
 
-export type BusInput = { plate?: string; route?: string; capacity?: string | number | null };
+function assertPlateIsFree(existing: BusEntry[], plate: string, exceptId?: string) {
+  const clash = existing.find(
+    (b) => b.id !== exceptId && b.plate && normalizePlate(b.plate) === normalizePlate(plate)
+  );
+  if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.plate}`);
+}
 
 export async function createBus(input: BusInput): Promise<BusEntry> {
-  const plate = cleanText(input.plate);
-  const route = cleanText(input.route);
-  const capacity = parseCapacity(input.capacity);
-  if (!plate) throw new HttpError(400, 'Plate is required');
-  if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
-  if (route.length > 100) throw new HttpError(400, 'Route is too long');
+  const values: Partial<Record<BusFieldKey, string | number>> = {};
+  for (const spec of BUS_FIELDS) {
+    if (input[spec.key] === undefined) continue;
+    const value = parseFieldValue(spec, input[spec.key]);
+    if (value != null) values[spec.key] = value;
+  }
+  if (Object.keys(values).length === 0) throw new HttpError(400, 'Fill in at least one field');
 
-  // Two rows with the same plate would make the bus picker ambiguous.
   const existing = await listBuses();
-  const clash = existing.find((b) => normalizePlate(b.title) === normalizePlate(plate));
-  if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
+  if (values.plate) assertPlateIsFree(existing, String(values.plate));
 
   const { busesListId, token, itemsUrl } = await busesListContext();
   const columns = await resolveBusColumns(busesListId);
-  if (!columns.plate) {
-    throw new HttpError(500, 'Could not find the plate column in the Buses list, so nothing was saved.');
-  }
-  if (capacity != null && !columns.capacity) throw missingCapacityColumn();
 
-  const fields: Record<string, unknown> = { [columns.plate]: plate };
-  if (route) fields.Title = route;
-  if (capacity != null) fields[columns.capacity] = capacity;
+  const fields: Record<string, unknown> = {};
+  for (const key of Object.keys(values) as BusFieldKey[]) {
+    const column = columns[key];
+    if (!column) throw missingColumn(key);
+    fields[column] = values[key];
+  }
+  // SharePoint needs a Title on a new row. On this list Title is the route
+  // number shift patterns look up; a new bus has no patterns yet.
+  fields.Title = String(values.route ?? values.busNumber ?? values.plate ?? values.type ?? '');
 
   const created = await graphPost<GraphListItem>(itemsUrl, token, { fields });
   invalidateBusesCache();
 
   return {
     id: String(created?.id || '').trim(),
-    title: plate,
-    route: route || undefined,
-    capacity: capacity ?? undefined,
-  };
+    title: String(values.plate ?? fields.Title),
+    ...values,
+  } as BusEntry;
 }
 
 /**
  * Changes only the fields that are given AND differ from what is stored.
- * A field that is left out is never written.
+ * A field that is left out is never written, and Title never is.
  */
 export async function updateBus(id: string, input: BusInput): Promise<BusEntry> {
   const busId = asString(id).trim();
@@ -421,49 +492,29 @@ export async function updateBus(id: string, input: BusInput): Promise<BusEntry> 
   const current = existing.find((b) => b.id === busId);
   if (!current) throw new HttpError(404, 'Bus not found');
 
-  const fields: Record<string, unknown> = {};
-  const next: BusEntry = { ...current };
   const { busesListId, token, itemsUrl } = await busesListContext();
   const columns = await resolveBusColumns(busesListId);
 
-  if (input.plate !== undefined) {
-    const plate = cleanText(input.plate);
-    if (!plate) throw new HttpError(400, 'Plate cannot be empty');
-    if (plate.length > 50) throw new HttpError(400, 'Plate is too long');
-    if (plate !== current.title) {
-      const clash = existing.find((b) => b.id !== busId && normalizePlate(b.title) === normalizePlate(plate));
-      if (clash) throw new HttpError(409, `A bus with that plate already exists: ${clash.title}`);
-      if (!columns.plate) {
-        throw new HttpError(500, 'Could not find the plate column in the Buses list, so nothing was saved.');
-      }
-      fields[columns.plate] = plate;
-      next.title = plate;
-    }
+  const fields: Record<string, unknown> = {};
+  const next: BusEntry = { ...current };
+  for (const spec of BUS_FIELDS) {
+    if (input[spec.key] === undefined) continue;
+    const value = parseFieldValue(spec, input[spec.key]);
+    const stored = (current as any)[spec.key] ?? null;
+    if (value === stored) continue;
+    const column = columns[spec.key];
+    if (!column) throw missingColumn(spec.key);
+    if (spec.key === 'plate' && value) assertPlateIsFree(existing, String(value), busId);
+    fields[column] = value;
+    if (value == null) delete (next as any)[spec.key];
+    else (next as any)[spec.key] = value;
   }
-
-  if (input.route !== undefined) {
-    const route = cleanText(input.route);
-    if (!route) throw new HttpError(400, 'Route cannot be empty');
-    if (route.length > 100) throw new HttpError(400, 'Route is too long');
-    if (route !== asString(current.route).trim()) {
-      fields.Title = route;
-      next.route = route;
-    }
-  }
-
-  if (input.capacity !== undefined) {
-    const capacity = parseCapacity(input.capacity);
-    if (capacity !== (current.capacity ?? null)) {
-      if (!columns.capacity) throw missingCapacityColumn();
-      fields[columns.capacity] = capacity;
-      next.capacity = capacity ?? undefined;
-    }
-  }
-
+  if ('Title' in fields) throw new HttpError(500, 'Refusing to write Title');
   if (Object.keys(fields).length === 0) return current;
 
   await graphPatch(`${itemsUrl}/${encodeURIComponent(busId)}/fields`, token, fields);
   invalidateBusesCache();
+  if (next.plate) next.title = next.plate;
   return next;
 }
 

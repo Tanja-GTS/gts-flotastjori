@@ -150,17 +150,24 @@ export async function fetchTimetables({ workspaceId }) {
 
 // fresh: read SharePoint now instead of the saved copy.
 export async function fetchBuses({ fresh = false } = {}) {
-  const base = getBaseUrl();
-  const data = await fetchJson(`${base}/api/buses${fresh ? '?fresh=1' : ''}`);
-  return data.buses || [];
+  return (await fetchBusesPage({ fresh })).buses;
 }
 
-export async function createBus({ plate, route, capacity }) {
+// For the Buses page: the buses plus which fields have a column in SharePoint
+// ({ route, plate, busNumber, type, capacity } -> true/false; null if unknown).
+export async function fetchBusesPage({ fresh = false } = {}) {
+  const base = getBaseUrl();
+  const data = await fetchJson(`${base}/api/buses${fresh ? '?fresh=1' : ''}`);
+  return { buses: data.buses || [], columns: data.columns || null };
+}
+
+// fields: { route, plate, busNumber, type, capacity } — any of them.
+export async function createBus(fields) {
   const base = getBaseUrl();
   const data = await fetchJson(`${base}/api/buses`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plate, route, capacity }),
+    body: JSON.stringify(fields),
   });
   return data.bus;
 }
