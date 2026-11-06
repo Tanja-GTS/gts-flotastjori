@@ -333,7 +333,9 @@ export async function listBuses(): Promise<BusEntry[]> {
         .map((item) => {
           const id = String(item.id || '');
           const fields = item.fields || {};
-          const routeId = asString(fields['RouteLookupId'] || fields['Route'] || '');
+          // Only a real lookup column. A plain "Route" text column is the
+          // managers' own note (it may list several routes) and means nothing here.
+          const routeId = asString(fields['RouteLookupId'] || '');
           const routeLabel = routeIdToLabel.get(routeId) || '';
           const title = busIdToTitle.get(id) || id;
           if (debugEnabled) debug.push({id, title, routeId, routeLabel, fields});
@@ -426,7 +428,7 @@ function parseFieldValue(spec: BusFieldSpec, raw: unknown): string | number | nu
     }
     return n;
   }
-  if (text.length > 100) throw new HttpError(400, `${FIELD_LABELS[spec.key]} is too long`);
+  if (text.length > 255) throw new HttpError(400, `${FIELD_LABELS[spec.key]} is too long`);
   return text;
 }
 
