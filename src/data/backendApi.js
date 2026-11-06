@@ -28,6 +28,8 @@ async function withAuth(init = {}) {
   return { ...init, headers };
 }
 
+export const MAINTENANCE_EVENT = 'fleet:maintenance';
+
 async function fetchJson(url, init) {
   // Local preview with made-up data, no backend needed: VITE_SAMPLE_DATA=true.
   if (SAMPLE_DATA) {
@@ -55,6 +57,17 @@ async function fetchJson(url, init) {
   const contentType = res.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const body = isJson ? await res.json().catch(() => null) : await res.text().catch(() => '');
+
+  // Maintenance mode (see backend/src/middleware/maintenance.ts). Tell the app
+  // so it shows the maintenance screen, or the reminder banner when this
+  // browser is let in to do the work.
+  if (typeof window !== 'undefined') {
+    if (res.status === 503 && body && typeof body === 'object' && body.code === 'maintenance') {
+      window.dispatchEvent(new CustomEvent(MAINTENANCE_EVENT, { detail: { state: 'on', message: body.message || '' } }));
+    } else if (res.headers.get('x-maintenance-mode') === 'bypass') {
+      window.dispatchEvent(new CustomEvent(MAINTENANCE_EVENT, { detail: { state: 'bypass' } }));
+    }
+  }
 
   if (!res.ok) {
     // Prefer backend-provided structured errors.

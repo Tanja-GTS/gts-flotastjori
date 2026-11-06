@@ -8,6 +8,8 @@ import { Notifications } from '@mantine/notifications';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
+import MaintenanceGate from './MaintenanceGate';
+import './maintenance.css';
 import { theme } from './theme';
 import { I18nProvider } from './i18n';
 
@@ -49,9 +51,11 @@ if (!rootEl) {
         <MantineProvider theme={theme}>
           <I18nProvider>
             <Notifications position="top-right" />
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            <MaintenanceGate>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </MaintenanceGate>
           </I18nProvider>
         </MantineProvider>
       </ErrorBoundary>

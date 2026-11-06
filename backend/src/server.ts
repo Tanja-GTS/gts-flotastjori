@@ -11,6 +11,7 @@ import cors from 'cors';
 import compression from 'compression';
 import { apiRouter } from './routes';
 import { entraAuth } from './middleware/entraAuth';
+import { maintenanceGate } from './middleware/maintenance';
 import { confirmRouter } from './routes/confirm';
 import { warmShiftCache } from './controllers/shiftsController';
 
@@ -25,6 +26,9 @@ app.use(
   })
 );
 app.use(compression());
+// Before everything else that serves the app: MAINTENANCE_MODE=true shows the
+// maintenance page to everyone without the bypass cookie.
+app.use(maintenanceGate());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

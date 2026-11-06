@@ -1,0 +1,70 @@
+/* Maintenance screen and banner (see MaintenanceGate.jsx) */
+.maintenanceScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #f5f6f8;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  color: #151922;
+}
+.maintenanceScreen__card {
+  max-width: 440px;
+  width: 100%;
+  padding: 32px 28px;
+  background: #fff;
+  border: 1px solid #e3e6eb;
+  border-radius: 12px;
+  text-align: center;
+}
+.maintenanceScreen h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+.maintenanceScreen h2 {
+  margin: 0 0 18px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #5c6370;
+}
+.maintenanceScreen p {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.maintenanceScreen__en {
+  color: #5c6370;
+}
+.maintenanceScreen__note {
+  margin-top: 18px !important;
+  padding-top: 14px;
+  border-top: 1px solid #eceef2;
+  font-size: 14px !important;
+}
+.maintenanceScreen button {
+  margin-top: 14px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #151922;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.maintenanceBanner {
+  position: sticky;
+  top: 0;
+  z-index: 10000;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: #5a3e00;
+  background: #ffe8a3;
+  border-bottom: 1px solid #e8c95a;
+}
