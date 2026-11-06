@@ -118,9 +118,10 @@ export async function getBusesListId(): Promise<string> {
 // Each row is a bus. The page shows and edits these fields, each kept in its
 // own column, found by the column's name in SharePoint:
 //   Route, Plate, Vagn Númer, Tegund (and Capacity, only if that column exists)
-// Title is NEVER written by a change: it holds the route number that shift
-// patterns look up, so it is what shift names are built from. Writing to it
-// renamed shifts once (2026-11-06); it must not happen again.
+// Title is written by a change ONLY as the Route field, and only while shift
+// names come from a separate Routes list (MS_ROUTES_LIST_ID != Buses list).
+// When Buses doubled as the Routes list, Title was the route number shift
+// names were built from, and writing it renamed shifts (2026-11-06).
 // ---------------------------------------------------------------------------
 
 export type BusFieldKey = 'route' | 'plate' | 'busNumber' | 'type' | 'capacity';
@@ -166,7 +167,10 @@ function looseName(raw: unknown): string {
     .toLowerCase();
 }
 
-export type BusColumns = Partial<Record<BusFieldKey, string>>;
+export type BusColumns = Partial<Record<BusFieldKey, string>> & {
+  // Fields whose SharePoint column is a Number column: written as numbers.
+  numeric?: Partial<Record<BusFieldKey, boolean>>;
+};
 let busColumnsCache: { fetchedAtMs: number; listId: string; cols: BusColumns } | null = null;
 
 function isWritableColumn(col: GraphColumn): boolean {
@@ -177,27 +181,36 @@ function isWritableColumn(col: GraphColumn): boolean {
   return String(col.name || '') !== 'Title';
 }
 
-/** Internal column name for each field that has a column. Never Title. */
-async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
-  const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
-  const now = Date.now();
-  if (busColumnsCache && busColumnsCache.listId === busesListId && now - busColumnsCache.fetchedAtMs < ttlMs) {
-    return busColumnsCache.cols;
-  }
+function normalizeListId(raw: unknown): string {
+  return String(raw ?? '').trim().replace(/[{}]/g, '').toLowerCase();
+}
 
-  const graph = getGraphConfig();
-  const token = await getGraphAppToken(graph);
-  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
-    graph.siteId
-  )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
-  const res = await graphGet<GraphColumnsResponse>(url, token);
-  const cols = (res.value || []).filter(isWritableColumn);
+/**
+ * Shift names come from the Routes list (MS_ROUTES_LIST_ID). Only when that is
+ * a DIFFERENT list than Buses is the Buses list's Title free to hold the
+ * bus's routes as plain information. If the two are the same list (as they
+ * were until 2026-11-06), writing Title would rename shifts, so never.
+ */
+function titleMayHoldRoute(busesListId: string): boolean {
+  const routesListId = normalizeListId(optionalEnv('MS_ROUTES_LIST_ID', ''));
+  return Boolean(routesListId) && routesListId !== normalizeListId(busesListId);
+}
+
+/**
+ * Picks the column for each field from the list's columns. Pure, so it can be
+ * tested without SharePoint. Title is only ever picked for Route, only when
+ * titleMayHoldRoute, and only when it is named like a route column.
+ */
+export function pickBusColumns(allCols: GraphColumn[], opts: { titleMayHoldRoute: boolean }): BusColumns {
+  const cols = allCols.filter(isWritableColumn);
 
   const result: BusColumns = {};
   const used = new Set<string>();
   const take = (key: BusFieldKey, name: string) => {
     result[key] = name;
     used.add(name);
+    const col = allCols.find((c) => String(c.name || '') === name);
+    if (col && (col as any).number) result.numeric = { ...(result.numeric || {}), [key]: true };
   };
 
   // 1) An env var that names the column outright.
@@ -225,6 +238,36 @@ async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
       take(spec.key, spec.fallback);
     }
   }
+  // 4) Route kept in Title, renamed "Route" in SharePoint: allowed only while
+  //    shift names come from a separate Routes list.
+  if (!result.route && opts.titleMayHoldRoute) {
+    const title = allCols.find((c) => String(c.name || '') === 'Title');
+    const routeNames = BUS_FIELDS.find((f) => f.key === 'route')!.names.map(looseName);
+    if (title && (title as any).readOnly !== true && routeNames.includes(looseName(title.displayName))) {
+      take('route', 'Title');
+    }
+  }
+
+  return result;
+}
+
+/** Internal column name for each field that has a column. Title only as in pickBusColumns. */
+async function resolveBusColumns(busesListId: string): Promise<BusColumns> {
+  const ttlMs = Number(optionalEnv('BUSES_COLUMNS_CACHE_TTL_MS', '600000')) || 600000;
+  const now = Date.now();
+  if (busColumnsCache && busColumnsCache.listId === busesListId && now - busColumnsCache.fetchedAtMs < ttlMs) {
+    return busColumnsCache.cols;
+  }
+
+  const graph = getGraphConfig();
+  const token = await getGraphAppToken(graph);
+  const url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(
+    graph.siteId
+  )}/lists/${encodeURIComponent(busesListId)}/columns?$top=999`;
+  const res = await graphGet<GraphColumnsResponse>(url, token);
+  const result = pickBusColumns(res.value || [], {
+    titleMayHoldRoute: titleMayHoldRoute(busesListId),
+  });
 
   busColumnsCache = { fetchedAtMs: now, listId: busesListId, cols: result };
   return result;
@@ -432,6 +475,14 @@ function parseFieldValue(spec: BusFieldSpec, raw: unknown): string | number | nu
   return text;
 }
 
+/** A value for a Number column must be sent as a number. */
+function toColumnValue(columns: BusColumns, key: BusFieldKey, value: string | number | null): string | number | null {
+  if (value == null || typeof value === 'number' || !columns.numeric?.[key]) return value;
+  const n = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(n)) throw new HttpError(400, `${FIELD_LABELS[key]} must be a number`);
+  return n;
+}
+
 function missingColumn(key: BusFieldKey): HttpError {
   return new HttpError(
     400,
@@ -466,11 +517,14 @@ export async function createBus(input: BusInput): Promise<BusEntry> {
   for (const key of Object.keys(values) as BusFieldKey[]) {
     const column = columns[key];
     if (!column) throw missingColumn(key);
-    fields[column] = values[key];
+    fields[column] = toColumnValue(columns, key, values[key] ?? null);
   }
-  // SharePoint needs a Title on a new row. On this list Title is the route
-  // number shift patterns look up; a new bus has no patterns yet.
-  fields.Title = String(values.route ?? values.busNumber ?? values.plate ?? values.type ?? '');
+  // When Route lives in Title, Title is set above from Route (or left empty).
+  // Otherwise SharePoint needs a Title on a new row; a new bus has no shift
+  // patterns pointing at it, so any label will do.
+  if (columns.route !== 'Title') {
+    fields.Title = String(values.route ?? values.busNumber ?? values.plate ?? values.type ?? '');
+  }
 
   const created = await graphPost<GraphListItem>(itemsUrl, token, { fields });
   invalidateBusesCache();
@@ -484,7 +538,7 @@ export async function createBus(input: BusInput): Promise<BusEntry> {
 
 /**
  * Changes only the fields that are given AND differ from what is stored.
- * A field that is left out is never written, and Title never is.
+ * A field that is left out is never written. Title only as described above.
  */
 export async function updateBus(id: string, input: BusInput): Promise<BusEntry> {
   const busId = asString(id).trim();
@@ -507,11 +561,15 @@ export async function updateBus(id: string, input: BusInput): Promise<BusEntry> 
     const column = columns[spec.key];
     if (!column) throw missingColumn(spec.key);
     if (spec.key === 'plate' && value) assertPlateIsFree(existing, String(value), busId);
-    fields[column] = value;
+    fields[column] = toColumnValue(columns, spec.key, value);
     if (value == null) delete (next as any)[spec.key];
     else (next as any)[spec.key] = value;
   }
-  if ('Title' in fields) throw new HttpError(500, 'Refusing to write Title');
+  // Title may only be written as the Route field, and only while shift names
+  // come from a separate Routes list (checked again here, not just cached).
+  if ('Title' in fields && !(columns.route === 'Title' && titleMayHoldRoute(busesListId))) {
+    throw new HttpError(500, 'Refusing to write Title: it may be what shift names are built from.');
+  }
   if (Object.keys(fields).length === 0) return current;
 
   await graphPatch(`${itemsUrl}/${encodeURIComponent(busId)}/fields`, token, fields);
@@ -542,9 +600,8 @@ export async function deleteBus(id: string): Promise<void> {
 
   // Patterns point at routes. That is this list when the Routes list is this
   // list, or when it is not configured and so cannot be ruled out.
-  const routesListId = optionalEnv('MS_ROUTES_LIST_ID', '').trim();
   const patterns = await listShiftPatterns({ includeInvalid: true });
-  if (!routesListId || routesListId === busesListId) {
+  if (!titleMayHoldRoute(busesListId)) {
     const usingRoute = patterns.filter((p) => String(p.routeId || '').trim() === busId);
     if (usingRoute.length > 0) {
       throw new HttpError(
